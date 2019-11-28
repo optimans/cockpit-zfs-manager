@@ -1,0 +1,95 @@
+﻿<!DOCTYPE html>
+<!--
+ * This file is part of Cockpit ZFS Manager.
+ *
+ * Copyright (C) 2019 OPTIMANS Pty Ltd.
+ *
+ * Cockpit ZFS Manager is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as published by the
+ * Free Software Foundation; either version 3 of the License, or (at your option)
+ * any later version.
+ *
+ * Cockpit ZFS Manager is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License along
+ * with Cockpit ZFS Manager; If not, see <http://www.gnu.org/licenses/>.
+ -->
+
+
+<html>
+<head>
+    <title translatable="no">Cockpit ZFS Manager</title>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+    <link href="../base1/patternfly.css" rel="stylesheet" type="text/css">
+    <link href="zfs.css" rel="stylesheet" type="text/css">
+
+    <script src="../base1/jquery.js"></script>
+    <script src="../base1/cockpit.js"></script>
+    <script src="../manifests.js"></script>
+    <script src="../*/po.js"></script>
+    <script src="zfs-additions.js"></script>
+    <script src="zfs.js"></script>
+</head>
+<body>
+    <div id="alerts-requirements" class="blank-slate-pf blank-slate-ct hidden"></div>
+    <div id="container" class="container-fluid hidden">
+        <div id="alerts-notifications" class="toast-notifications-list-pf"></div>
+        <div>
+            <section class="ct-listing">
+                <header>
+                    <h3 class="listing-ct-heading">Storage Pools</h3>
+                    <div class="listing-ct-actions">
+                        <div class="pull-right">
+                            <button id="btn-storagepools-create" class="btn btn-primary" data-toggle="modal" data-target="#modal-storagepools-create" tabIndex="-1" type="button">Create Storage Pool</button>
+                            <button id="btn-storagepools-import" class="btn btn-default" data-toggle="modal" data-target="#modal-storagepools-import" tabIndex="-1" type="button">Import Storage Pool</button>
+                            <div class="btn-group dropdown">
+                                <button id="btn-storagepools-refresh" class="btn btn-default" tabindex="-1">Refresh</button>
+                                <button class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabindex="-1">
+                                    <span class="caret"></span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-right" role="menu">
+                                    <li class="presentation"><a id="btn-storagepools-filesystems-unlock" class="privileged" data-toggle="modal" data-target="#modal-storagepools-filesystems-unlock" href="#" onclick="return false;" tabIndex="-1">Unlock File Systems</a></li>
+                                    <li class="divider" role="separator"></li>
+                                    <li class="presentation"><a id="btn-configure" class="privileged" data-toggle="modal" data-target="#modal-configure" href="#" onclick="return false;" tabIndex="-1">Configure Cockpit ZFS Manager</a></li>
+                                    <li class="divider" role="separator"></li>
+                                    <li class="presentation"><a id="btn-about" data-toggle="modal" data-target="#modal-about" href="#" onclick="return false;" tabIndex="-1">About Cockpit ZFS Manager</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+                <table id="table-storagepools" class="listing listing-ct listing-ct-wide">
+                    <thead>
+                        <tr>
+                            <th class="listing-ct-toggle"></th>
+                            <th colspan="2">Name</th>
+                            <th>Health</th>
+                            <th>Size</th>
+                            <th class="listing-ct-wordwrap">Allocated</th>
+                            <th>Free</th>
+                            <th class="listing-ct-wordwrap">Fragmentation</th>
+                            <th>Usage</th>
+                            <th class="listing-ct-icon"></th>
+                            <th class="listing-ct-actionsmenu"></th>
+                        </tr>
+                        <tr id="spinner-storagepools">
+                            <th colspan="11">
+                                <div class="col-md-12">
+                                    <div class="spinner spinner-lg"></div>
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                </table>
+            </section>
+        </div>
+    </div>
+    <div id="modals"></div>
+    <div id="dynamics"></div>
+</body>
+</html>

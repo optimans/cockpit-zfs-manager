@@ -1,0 +1,2105 @@
+/*
+ * This file is part of Cockpit ZFS Manager.
+ *
+ * Copyright (C) 2019 OPTIMANS Pty Ltd.
+ *
+ * Cockpit ZFS Manager is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as published by the
+ * Free Software Foundation; either version 3 of the License, or (at your option)
+ * any later version.
+ *
+ * Cockpit ZFS Manager is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License along
+ * with Cockpit ZFS Manager; If not, see <http://www.gnu.org/licenses/>.
+ */
+
+
+/* Portions of Cockpit Storage CSS appended. Version 201 */
+
+a.disabled,
+a[disabled],
+.btn.disabled,
+.btn[disabled],
+fieldset[disabled] .btn {
+    cursor: not-allowed !important;
+}
+
+.btn-group > .dropdown-menu.dropdown-menu-right {
+    margin-right: 0px !important;
+    overflow-x: visible !important;
+}
+
+.blank-slate-ct {
+    height: 100%;
+    position: fixed;
+    top: 0px;
+    width: 100%;
+}
+
+/* Fix for extra long text in dropdown */
+.ct-form .dropdown-toggle {
+    position: absolute;
+}
+
+    /* Fix for extra long text in dropdown */
+    .ct-form .dropdown-toggle > span {
+        max-width: 100%;
+        padding-right: 25px;
+        text-align: left;
+    }
+
+.ct-form-spacing {
+    padding-top: 1.5rem;
+}
+
+.dialog-item-ct-popover,
+.dialog-item-ct-tooltip {
+    margin-left: 0.5em;
+    white-space: nowrap;
+}
+
+.dialog-wait-ct {
+    margin-top: 7px;
+}
+
+    .dialog-wait-ct .spinner {
+        display: inline-block;
+    }
+
+    .dialog-wait-ct span {
+        padding-left: 10px;
+        vertical-align: 7px;
+    }
+
+.dropdown.dropdown-kebab-pf > .dropdown-menu.dropdown-menu-right {
+    margin-right: 15px !important;
+    overflow-x: visible !important;
+}
+
+.list-group-ct-warning {
+    color: var(--pf-global--danger-color--100);
+}
+
+.list-unstyled-ct {
+    word-break:break-word;
+}
+
+.listing-ct .listing-ct-actionsmenu {
+    width: 60px !important;
+}
+
+    .listing-ct .listing-ct-actionsmenu .text-ct-locked {
+        color: var(--color-button-primary);
+    }
+
+.listing-ct .listing-ct-icon .pficon-ct-locked {
+    color: var(--color-button-primary);
+}
+
+.listing-ct .pficon-ct-bootreadonly {
+    color: var(--pf-global--primary-color--100);
+}
+
+.listing-ct .pficon-ct-altroot,
+.listing-ct .pficon-ct-readonly {
+    color: var(--pf-global--secondary-color--100);
+}
+
+.listing-ct .listing-ct-icon .pficon-ct-upgrade {
+    color: var(--pf-global--warning-color--100);
+}
+
+.listing-ct-wordwrap {
+    word-break: break-all;
+}
+
+.listing-ct .listing-ct-icon {
+    width: 35px !important;
+}
+
+.listing-ct .listing-ct-spinner {
+    width: 50px !important;
+}
+
+.listing-ct .listing-ct-toggle:empty {
+    width: 45px !important;
+}
+
+.listing-ct .listing-ct-body-spinner {
+    padding: 1rem 1.5rem;
+}
+
+.listing-ct-item > .listing-ct-toggle + td {
+    font-weight: bold;
+}
+
+.listing-ct-item > td > span.table-ct-head,
+.listing-ct-item > td.listing-ct-icon > span.table-ct-text,
+.table.table-ct-filesystems > tbody > tr > td > span.table-ct-head,
+.table.table-ct-snapshots > tbody > tr > td > span.table-ct-head,
+.table.table-ct-status-config > tbody > tr > td > span.table-ct-head,
+.table.table-ct-filesystems > tbody > tr > td > span.table-ct-text,
+.table.table-ct-snapshots > tbody > tr > td > span.table-ct-text,
+.table.table-ct-status-config > tbody > tr > td > span.table-ct-text {
+    display: none;
+}
+
+.listing-ct-wide {
+    table-layout: fixed;
+}
+
+.modal-content .ct-form .alert {
+    padding-top: 5px;
+    padding-bottom: 5px;
+    text-align: left;
+}
+
+.modal-content .modal-ct-name {
+    word-break: break-all;
+}
+
+.modal-ct-bodytext-1 {
+    padding-bottom: 1.5rem;
+}
+
+.modal-ct-bodytext-2 {
+    padding-bottom: 3rem;
+}
+
+.modal-ct-buttons {
+    display: inline-block;
+}
+
+.panel {
+    border: 0px !important;
+    margin-bottom: 0px;
+}
+
+    .panel > .panel-heading > .panel-ct-heading .spinner.spinner-sm {
+        float: left;
+    }
+
+.pficon-ct-filesystems {
+    margin-top: 5px;
+}
+
+.progress.progress-sm {
+    display: list-item;
+    margin-bottom: 0px;
+}
+
+.select-ct-disk-row {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+}
+
+    .select-ct-disk-row :nth-child(1) {
+        margin-top: 0px;
+    }
+
+    .select-ct-disk-row :nth-child(2) {
+        flex-grow: 1;
+        margin-left: 10px;
+    }
+
+.select-ct-disk-row-id {
+    display: block !important;
+    font-size: var(--pf-global--FontSize--xs);
+    padding-right: 10px;
+    word-break:break-all;
+}
+
+.select-ct-pool-row {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+}
+
+    .select-ct-pool-row :nth-child(1) {
+        margin-top: 0px;
+    }
+
+    .select-ct-pool-row :nth-child(2) {
+        flex-grow: 1;
+        margin-left: 10px;
+    }
+
+.select-ct-pool-row-id {
+    display: block !important;
+    font-size: var(--pf-global--FontSize--xs);
+    padding-right: 5px;
+    word-break: break-all;
+}
+
+.select-ct-filesystem-row {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+    word-break: break-all;
+}
+
+    .select-ct-filesystem-row :nth-child(1) {
+        margin-top: 0px;
+    }
+
+    .select-ct-filesystem-row :nth-child(2) {
+        flex-grow: 1;
+        margin-left: 10px;
+    }
+
+.slider-pf {
+    margin: 0 0 0 8px;
+}
+
+    .slider-pf > .size-ct-text {
+        display: inline;
+        margin: 2px 2px 2px 8px;
+        text-align: right;
+        width: 5em;
+    }
+
+        .slider-pf > .size-ct-text .disabled {
+            cursor: not-allowed !important;
+            pointer-events: inherit !important;
+        }
+
+    .slider-pf > .dropdown {
+        flex: 1 0 80px;
+    }
+
+        .slider-pf > .dropdown > .size-ct-unit > span {
+            padding-right: 0px;
+        }
+
+    .slider-pf > span {
+        padding-left: 5px;
+    }
+
+.slider-selection {
+    background-color: var(--color-link);
+    background-image: linear-gradient(to bottom,var(--color-link) 0%,var(--color-link) 100%);
+}
+
+.slider.slider-horizontal {
+    height: 5px;
+    width: 100%;
+}
+
+    .slider.slider-horizontal .slider-track {
+        height: 5px;
+        left: 0;
+        margin-top: -2px;
+        top: 50%;
+        width: 100%;
+    }
+
+.slider-handle {
+    background-color: var(--color-link) !important;
+    background-image: linear-gradient(to bottom,var(--color-link) 0%,var(--color-link) 100%) !important;
+    border: 0px;
+    border-radius: 9px;
+    cursor: pointer !important;
+    height: 18px;
+    top: -6px;
+    width: 18px;
+}
+
+    .slider-handle.disabled {
+        background-color: var(--color-subtle-copy) !important;
+        background-image: linear-gradient(to bottom,var(--color-subtle-copy) 0%,var(--color-subtle-copy) 100%) !important;
+        cursor: not-allowed !important;
+    }
+
+.slider-selection.disabled {
+    background-color: var(--color-subtle-copy);
+    background-image: linear-gradient(to bottom,var(--color-subtle-copy) 0%,var(--color-subtle-copy) 100%);
+}
+
+.slider-track {
+    background-color: #ededed;
+    border: 0px;
+    box-shadow: none;
+}
+
+    .slider-track.disabled {
+        background-color: var(--color-subtle-copy);
+        border: 0px;
+    }
+
+.slider-track-high {
+    background-color: #ededed;
+}
+
+.slider-track-low {
+    background-color: var(--color-link);
+    background-image: linear-gradient(to bottom,var(--color-link) 0%,var(--color-link) 100%);
+}
+
+    .slider-track-low.disabled {
+        background-color: var(--color-subtle-copy);
+        background-image: linear-gradient(to bottom,var(--color-subtle-copy) 0%,var(--color-subtle-copy) 100%);
+    }
+
+.table {
+    table-layout: fixed !important;
+}
+
+    .table > thead > tr > th,
+    .table > tbody > tr > td {
+        padding: 0.4rem;
+        vertical-align: middle;
+    }
+
+        .table > tbody > tr > td.ct-spacing {
+            padding-bottom: 1.7rem;
+        }
+
+        .table > tbody > tr > td.config-level-0-sub-hidden {
+            padding: 0px !important;
+        }
+
+        .table > tbody > tr > td.config-level-1 {
+            padding-left: 3em !important;
+        }
+
+        .table > tbody > tr > td.config-level-2 {
+            padding-left: 5em !important;
+        }
+
+        .table > tbody > tr > td.config-level-3 {
+            padding-left: 7em !important;
+        }
+
+        .table > tbody > tr > td.config-level-4 {
+            padding-left: 9em !important;
+        }
+
+        .table > tbody > tr > td > span.config-count-danger {
+            color: var(--pf-global--danger-color--100);
+        }
+
+        .table > tbody > tr > td > span.config-count-warning {
+            color: var(--pf-global--warning-color--100);
+        }
+
+        .table[id^="table-storagepool-status-"] > thead,
+        .table[id^="table-storagepool-status-"] > thead > tr,
+        .table[id^="table-storagepool-status-"] > thead > tr > th {
+            border: 0 none !important;
+            height: 0 !important;
+            opacity: 0 !important;
+            padding: 0 !important;
+        }
+
+tbody > tr.listing-ct-item.listing-ct-storagepoolsnotfound {
+    cursor: default !important;
+}
+
+    tbody > tr.listing-ct-item.listing-ct-storagepoolsnotfound > td:first-child {
+        padding-left: 50px;
+    }
+
+.toast-notifications-list-pf {
+    top: 20px;
+}
+
+.toast-pf > span > span.toast-ct-message {
+    word-break: break-all;
+}
+
+/* Fix for flashing tooltip */
+.tooltip {
+    pointer-events: none !important;
+    position: fixed;
+}
+
+.tooltip-inner {
+    overflow-wrap: break-word;
+}
+
+@media screen and (max-width: 343px) {
+    .dropdown-menu-right {
+        left: auto;
+        right: auto;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .dropdown-ct-status {
+        left: auto !important;
+        right: auto !important;
+    }
+
+    .panel > .panel-heading > .panel-ct-actions {
+        text-align: left !important;
+    }
+
+    .panel > .panel-heading > .panel-ct-heading,
+    .panel > .panel-heading > .panel-ct-heading > .panel-title {
+        min-height: 32px;
+        min-width: 100%;
+    }
+}
+
+@media screen and (min-width: 401px) and (max-width: 525px) {
+    .dropdown-menu-right {
+        left: auto;
+        right: auto;
+    }
+}
+
+@media screen and (min-width: 481px) and (max-width: 525px) {
+    .dropdown-ct-status {
+        left: auto !important;
+        right: 0 !important;
+    }
+}
+
+@media screen and (max-width: 640px) {
+    .dialog-wait-ct {
+        margin-bottom: 0.5em;
+    }
+
+    .listing-ct > thead > tr:first-child {
+        display: none;
+    }
+
+    .listing-ct-actions > div > button.btn,
+    .listing-ct-actions > div > div.btn-group {
+        margin-bottom: 5px !important;
+    }
+
+    .listing-ct-item > td {
+        padding: 0.5rem !important;
+        vertical-align: middle !important;
+    }
+
+        .listing-ct-item > td.listing-ct-actionsmenu {
+            display: table-cell !important;
+        }
+
+        .listing-ct-item > td:not(:first-child),
+        .listing-ct-item > th {
+            display: block;
+            max-width: 100% !important;
+        }
+
+    .listing-ct-item > td > span.table-ct-head,
+    .table.table-ct-filesystems > tbody > tr > td > span.table-ct-head,
+    .table.table-ct-snapshots > tbody > tr > td > span.table-ct-head,
+    .table.table-ct-status-config > tbody > tr > td > span.table-ct-head {
+        color: var(--color-subtle-copy);
+        display: inherit !important;
+        float: left;
+        font-weight: normal;
+        padding-right: 0.5em;
+    }
+
+    .listing-ct-item > td.listing-ct-icon > span.table-ct-text,
+    .table.table-ct-filesystems > tbody > tr > td > span.table-ct-text,
+    .table.table-ct-snapshots > tbody > tr > td > span.table-ct-text,
+    .table.table-ct-status-config > tbody > tr > td > span.table-ct-text {
+        display: inline-block !important;
+        padding-right: 0.5em;
+    }
+
+    .listing-ct-item > td.listing-ct-icon,
+    .table.table-ct-filesystems > tbody > tr > td.listing-ct-icon,
+    .table.table-ct-snapshots > tbody > tr > td.listing-ct-icon {
+        width: 100% !important;
+    }
+
+    .listing-ct-wide {
+        table-layout: initial;
+    }
+
+    .panel {
+        overflow-x: visible !important;
+    }
+
+        .panel > .panel-heading {
+            position: inherit !important;
+        }
+
+            .panel > .panel-heading > .panel-actions > button.btn {
+                margin-bottom: 5px !important;
+            }
+
+    .table tbody tr > :first-child {
+        padding-left: 0.4rem !important;
+    }
+
+    .table > tbody > tr > td.config-level-0-sub {
+        clear: both;
+    }
+
+        .table > tbody > tr > td.config-level-0-sub::after,
+        .table > tbody > tr > td.config-level-1-sub::after,
+        .table > tbody > tr > td.config-level-2-sub::after,
+        .table > tbody > tr > td.config-level-3-sub::after,
+        .table > tbody > tr > td.config-level-4-sub::after {
+            content: "\00a0";
+        }
+
+    .table > tbody > tr > td.config-level-0-sub-hidden,
+    .table > tbody > tr > td.config-level-1-sub-hidden {
+        display: none !important;
+    }
+
+    .table > tbody > tr > td.config-level-1,
+    .table > tbody > tr > td.config-level-1-sub {
+        padding-left: 1.5em !important;
+    }
+
+    .table > tbody > tr > td.config-level-2,
+    .table > tbody > tr > td.config-level-2-sub {
+        padding-left: 3em !important;
+    }
+
+    .table > tbody > tr > td.config-level-3,
+    .table > tbody > tr > td.config-level-3-sub {
+        padding-left: 4.5em !important;
+    }
+
+    .table > tbody > tr > td.config-level-4,
+    .table > tbody > tr > td.config-level-4-sub {
+        padding-left: 6em !important;
+    }
+
+    .table-ct-filesystems > thead,
+    .table-ct-snapshots > thead,
+    .table-ct-status-config > thead {
+        display: none;
+    }
+
+    .table-ct-filesystems > tbody > tr > td:not(:last-child),
+    .table-ct-snapshots > tbody > tr > td:not(:last-child),
+    .table-ct-status-config > tbody > tr > td:not(:nth-last-child(-n+2)) {
+        display: block;
+        max-width: 100% !important;
+    }
+
+    .table-ct-status-config > tbody > tr.table-ct-confighead {
+        display: none;
+    }
+
+    .table-ct-status-config > tbody > tr > td.config-level-0-virtualdevice {
+        display: table-cell !important;
+    }    
+}
+
+
+
+/*
+ * This file is part of Cockpit.
+ *
+ * Copyright (C) 2015 Red Hat, Inc.
+ *
+ * Cockpit is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation; either version 2.1 of the License, or
+ * (at your option) any later version.
+ *
+ * Cockpit is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Cockpit; If not, see <http://www.gnu.org/licenses/>.
+ */
+
+
+.btn-group {
+    /* Fix button groups from wrapping in narrow widths */
+    display: inline-flex;
+}
+
+.dropdown-menu > li > a.disabled,
+.dropdown-menu > li > a.disabled:hover,
+.dropdown-menu > li > a.disabled:focus {
+    color: var(--color-subtle-copy);
+}
+
+    .dropdown-menu > li > a.disabled:hover,
+    .dropdown-menu > li > a.disabled:focus {
+        text-decoration: none;
+        background-color: transparent;
+        background-image: none;
+        border-color: transparent;
+        filter: progid:DXImageTransform.Microsoft.gradient(enabled = false);
+        cursor: default;
+    }
+
+    /* Limit dropdown menus to 90% of the viewport size */
+    .dropdown-menu {
+    height: auto;
+    overflow-y: auto;
+    max-height: 90vh;
+}
+
+/* Allow kebab menus to have a ^ with overflowing */
+/* Note: This means kebab menus cannot be _too_ long */
+.dropdown-kebab-pf > .dropdown-menu {
+    overflow: visible;
+}
+
+.dialog-list-ct {
+    max-height: 230px;
+    overflow-x: auto;
+    border: 1px solid var(--color-light-gray);
+    margin-bottom: 0px;
+}
+
+:root {
+    /* Custom font aliases */
+    --font-family: var(--pf-global--FontFamily--sans-serif);
+    --font-family-mono: var(--pf-global--FontFamily--monospace);
+    --font-size: var(--pf-global--FontSize--md);
+    --font-size-s: var(--pf-global--FontSize--sm);
+    --font-size-xs: var(--pf-global--FontSize--xs);
+    --font-size-l: var(--pf-global--FontSize--lg);
+    --font-size-xl: var(--pf-global--FontSize--xl);
+    --font-size-2xl: var(--pf-global--FontSize--2xl);
+    --font-size-3xl: var(--pf-global--FontSize--3xl);
+    /* Cockpit custom colors */
+    --color-ct-light-red-1: #f8cccc;
+    --color-ct-light-red-2: #f8acac;
+    --color-ct-light-red-3: #f98383;
+    --color-ct-brick-gold: #ffa763;
+    --color-ct-brick-red: #a53131;
+    --color-ct-nav: #292e34;
+    --color-ct-nav-sub: var(--pf-global--BackgroundColor--100);
+    --color-ct-nav-text: var(--pf-global--Color--100);
+    --color-ct-nav-active: var(--pf-global--BackgroundColor--150);
+    --color-ct-nav-active-text: var(--color-link);
+    --color-ct-nav-hover: var(--pf-global--BackgroundColor--150);
+    --color-ct-nav-hover-text: var(--color-link);
+    --color-ct-nav-border: var(--pf-global--BorderColor--100);
+    --color-ct-nav-cover-up: linear-gradient(to bottom, var(--color-ct-nav-sub), rgba(255,255,255, 0));
+    --color-ct-nav-cover-down: linear-gradient(to top, var(--color-ct-nav-sub), rgba(255,255,255, 0));
+    --color-ct-nav-main: var(--pf-global--BorderColor--300);
+    --color-ct-nav-main-text: var(--color-ct-nav-text);
+    --color-ct-nav-main-border: var(--pf-global--BorderColor--100);
+    --color-ct-nav-main-active: var(--color-ct-nav-sub);
+    --color-ct-nav-main-active-text: var(--color-link);
+    --color-ct-nav-main-hover: var(--pf-global--BackgroundColor--200);
+    --color-ct-nav-main-hover-text: var(--pf-global--Color--300);
+    --color-border: var(--pf-global--BorderColor--100);
+    --color-ct-list-text: var(--color-text);
+    --color-ct-list-link: var(--color-link);
+    --color-ct-list-bg: var(--color-bg);
+    --color-ct-list-border: var(--color-border);
+    --color-ct-list-hover-text: var(--color-link);
+    --color-ct-list-hover-bg: var(--pf-global--BackgroundColor--150);
+    --color-ct-list-hover-border: var(--pf-global--BackgroundColor--150);
+    --color-ct-list-hover-icon: var(--color-blue);
+    --color-ct-list-selected-text: var(--color-link);
+    --color-ct-list-selected-bg: var(--pf-global--BackgroundColor--150);
+    --color-ct-list-selected-border: var(--pf-global--BackgroundColor--150);
+    --color-ct-list-active-text: var(--color-link-focus);
+    --color-ct-list-active-bg: var(--color-bg);
+    --color-ct-list-active-border: var(--color-ct-list-border);
+    --color-ct-list-critical-bg: var(--color-ct-light-red-1);
+    --color-ct-list-critical-border: var(--color-ct-light-red-2);
+    --color-ct-list-critical-bg-hover: var(--color-ct-light-red-2);
+    --color-ct-list-critical-border-hover: var(--color-ct-light-red-3);
+    --color-link-hover-bg: var(--color-light-blue-2);
+    --color-link-hover-icon: var(--color-blue-5);
+    /* Red Hat Digital Design System 2019 named colors */
+    --color-red-hat-red: #ee0000;
+    --color-red-1: #cc0000;
+    --color-red-2: #a30000;
+    --color-red-3: #820000;
+    --color-dark-red-4: #5a0000;
+    --color-dark-red-5: #460000;
+    --color-dark-red-6: #320000;
+    --color-black: #000000;
+    --color-white: #ffffff;
+    --color-dark-blue: #004153;
+    --color-light-blue: #a3dbe8;
+    --color-dark-gray: #4c4c4c;
+    --color-light-gray: #dcdcdc;
+    --color-purple: #3b0083;
+    --color-gold: #f0ab00;
+    --color-teal: #007987;
+    --color-blue: #00b9e4;
+    --color-green: #92d400;
+    --color-storage: #ec7a08;
+    --color-infra: #0088ce;
+    --color-app-dev: #3f9c35;
+    --color-light-blue-1: #e8f6f9;
+    --color-light-blue-2: #d1edf4;
+    --color-light-blue-3: #b6e2ec;
+    --color-dark-blue-1: #80a0a9;
+    --color-dark-blue-2: #4e7a86;
+    --color-dark-blue-3: #1b5764;
+    --color-blue-1: #d9f5fb;
+    --color-blue-2: #c0edf7;
+    --color-blue-3: #9ae4f3;
+    --color-blue-4: #82ddf1;
+    --color-blue-5: #68d6ee;
+    --color-blue-6: #38c8e8;
+    --color-teal-1: #d9ebed;
+    --color-teal-2: #cbe4f1;
+    --color-teal-3: #b3d7db;
+    --color-teal-4: #9acacf;
+    --color-teal-5: #68afb6;
+    --color-teal-6: #36959e;
+    --color-green-1: #eaf5cd;
+    --color-green-2: #dff1b4;
+    --color-green-3: #d4ec9c;
+    --color-green-4: #cae883;
+    --color-green-5: #b5df56;
+    --color-green-6: #aadb40;
+    --color-gold-1: #fcedcd;
+    --color-gold-2: #fae5b4;
+    --color-gold-3: #f9dc9c;
+    --color-gold-4: #f8d384;
+    --color-gold-5: #f5c255;
+    --color-gold-6: #f2b22d;
+    --color-purple-1: #e2daec;
+    --color-purple-2: #cdc0df;
+    --color-purple-3: #b09bcc;
+    --color-purple-4: #9c82c0;
+    --color-purple-5: #8869b3;
+    --color-purple-6: #7551a6;
+    --color-gray-1: #f0f0f0;
+    --color-gray-2: #e6e6e6;
+    --color-gray-3: #d2d2d2;
+    --color-gray-4: #bebebe;
+    --color-gray-5: #aaaaaa;
+    --color-gray-6: #969696;
+    --color-gray-7: #828282;
+    --color-gray-8: #6e6e6e;
+    --color-gray-9: #5a5a5a;
+    --color-gray-10: #464646;
+    --color-gray-11: #323232;
+    --color-gray-12: #1e1e1e;
+    /* Semantic colors */
+    --color-fg: #151515;
+    --color-bg: #fff;
+    --color-text: var(--color-fg);
+    --color-link: #0066cc;
+    --color-link-visited: #0066cc;
+    --color-link-hover: #004080;
+    --color-link-focus: #004080;
+    --color-link-dark: #73bcf7;
+    --color-link-visited-dark: #73bcf7;
+    --color-link-hover-dark: #2b9af3;
+    --color-link-focus-dark: #2b9af3;
+    --color-heading: #151515;
+    --color-heading-dark: #ffffff;
+    --color-body-copy: #151515;
+    --color-body-copy-dark: #cccccc;
+    --color-body-copy-dark-color: rbga(255,255,255,0.8);
+    --color-subtle-copy: #72767b;
+    --color-subtle-text-dark: #cccccc;
+    --color-alert-success-bg: #ffffff;
+    --color-alert-sucess-icon: #92d400;
+    --color-alert-sucess-border: #92d400;
+    --color-alert-success-text: #486b00;
+    --color-alert-info-bg: #ffffff;
+    --color-alert-info-icon: #39a5dc;
+    --color-alert-info-border: #39a5dc;
+    --color-alert-info-text: #004368;
+    --color-alert-warning-bg: #ffffff;
+    --color-alert-warning-icon: #f0ab00;
+    --color-alert-warning-border: #f0ab00;
+    --color-alert-warning-text: #795600;
+    --color-alert-danger-bg: #ffffff;
+    --color-alert-danger-icon: #c9190b;
+    --color-alert-danger-border: #c9190b;
+    --color-alert-danger-text: #7d1007;
+    --color-low-severity-background: #ffffff;
+    --color-low-severity-icon: #72767b;
+    --color-low-severity-border: #72767b;
+    --color-low-severity-text: #151515;
+    --color-moderate-severity-background: #ffffff;
+    --color-moderate-severity-icon: #f0ab00;
+    --color-moderate-severity-border: #f0ab00;
+    --color-moderate-severity-text: #795600;
+    --color-important-severity-background: #ffffff;
+    --color-important-severity-icon: #df7409;
+    --color-important-severity-border: #df7409;
+    --color-important-severity-text: #8f4c09;
+    --color-critical-severity-background: #ffffff;
+    --color-critical-severity-icon: #c9190b;
+    --color-critical-severity-border: #c9190b;
+    --color-critical-severity-text: #7d1007;
+    --color-cta-default: #0066cc;
+    --color-cta-default-hover: #004080;
+    --color-cta-primary: #ee0000;
+    --color-cta-primary-hover: #d40000;
+    --color-cta-secondary: #151515;
+    --color-cta-secondary-hover: #151515;
+    --color-cta-accent: #0066cc;
+    --color-cta-accent-hover: #0066cc;
+    --color-button-text: #ffffff;
+    --color-button-text-dark: #151515;
+    --color-button-default: #151515;
+    --color-button-default-hover: #151515;
+    --color-button-primary: #0066cc;
+    --color-button-primary-hover: #004080;
+    --color-button-secondary: #0066cc;
+    --color-button-secondary-hover: #0066cc;
+    --color-button-disabled: #d2d2d2;
+    --color-button-disabled-text: #72767b;
+    --color-border-lighter: #d2d2d2;
+    --color-border-default: #d2d2d2;
+    --color-border-darker: #d2d2d2;
+    --color-potential-band-color: #f0f0f0;
+    --color-ui-hover-bg: #ededed;
+    --color-ui-alternate-row-bg: #ededed;
+    --color-label: #151515;
+    --color-form-field-bottom-border: #8b8d8f;
+    --color-form-field-border: #0066cc;
+    --color-form-field-focus: #0066cc;
+    --color-form-field-bg: #ffffff;
+    --color-form-field-text: #151515;
+    --color-form-field-error-border: #a30000;
+    --color-form-field-error-bg: #ffffff;
+    --color-form-field-error-text: #a30000;
+    --color-form-field-active-border: #0066cc;
+    --color-select-dropdown-bottom-border: #8b8d8f;
+    --color-select-dropdown-bg: #ffffff;
+    --color-select-dropdown-arrow-color: #151515;
+    --color-select-dropdown-text-color: #151515;
+    --color-breadcrumb-link: #0066cc;
+    --color-breadcrumb-link-hover: #004080;
+    --color-breadcrumb-text: #151515;
+    --color-pagination-current-text: #393f44;
+    --color-chips: #72767b;
+    --color-chips-secondary: #72767b;
+    --color-chips-hover: #72767b;
+    --color-tab-link: #007bba;
+    --color-tab-text: #007bba;
+    --color-tab-indicator-color: #007bba;
+    --color-tab-bg: #ffffff;
+    --color-tab-border: #ededed;
+    --color-tab-selected-text: #007bba;
+    --color-tab-selected-indicator-color: #007bba;
+    --color-tab-selected-bg: #ffffff;
+    --color-tab-selected-border: #ededed;
+    --color-tooltips-bg: #ffffff;
+    --color-tooltips-text: #151515;
+    --color-modal-bg: #ffffff;
+    --color-modal-header-bg: #151515;
+    --color-table-header-bg: #ffffff;
+    --color-table-header-text: #393f44;
+    --color-table-header-border: #ededed;
+    --color-table-header-border-bottom: #ededed;
+    --color-table-border: #ededed;
+    --color-table-border-bottom: #ededed;
+    --color-table-text: #393f44;
+}
+
+/* Table headers should not generate a double border */
+.panel .table thead tr th {
+    border-bottom: none;
+}
+
+/* Fix panel heading alignment & mobile layout */
+.panel-heading {
+    align-items: center;
+    background: #f5f5f5;
+    display: flex;
+    flex-wrap: wrap;
+    /* (28px small size widget height) + (0.5rem * 2) */
+    min-height: calc(28px + 1rem);
+    /* Modified for Cockpit ZFS Manager - Original: padding: 0.5rem 0.5rem 0.5rem 1rem; */
+    padding: 0.5rem 1rem 0.5rem 1rem;
+    position: relative;
+    z-index: 100;
+}
+
+.panel-title {
+    font: inherit;
+    margin: 0;
+    padding: 0;
+}
+
+    .panel-title > a {
+        color: var(--color-link);
+        display: inline-block;
+    }
+
+        .panel-title > a:hover,
+        .panel-title > a:focus {
+            color: var(--alert-info-text);
+        }
+
+    /* Allow children in the title to wrap */
+    .panel-title > h3,
+    .panel-title > a,
+    .panel-title > div,
+    .panel-title > span {
+        flex-shrink: 1;
+        word-break: break-all;
+    }
+
+.panel-heading > :last-child:not(:first-child),
+.panel-heading > .pull-right,
+.panel-heading > .panel-heading-actions {
+    flex: auto;
+    text-align: right;
+}
+
+.panel-heading > .pull-right {
+    /* HACK: Pull right shouldn't be used to change document order. */
+    /* This CSS _also_ changes document order to replicate the float. */
+    /* Solution: Fix document order when pull-right is used. */
+    order: 100;
+}
+
+    .panel-heading > .pull-right:first-child ~ :last-child {
+        /* Undo :last-child above for cases where pull-right is used before */
+        text-align: left;
+    }
+
+@media screen and (max-width: 640px) {
+    /* Remove _most_ of the gaps on the sides of small screens */
+    /* to maximize space, but still keep the boxy panel look */
+    /* (container-fluid & page-ct adds 20px, so we remove 1/2 of that) */
+    .page-ct > .panel,
+    .container-fluid > .panel,
+    .col-md-12 > .panel {
+        margin-left: -10px;
+        margin-right: -10px;
+    }
+
+    .panel {
+        /* Background fade */
+        --hi-color: #d1d1d1;
+        --hi-color2: var(--color-gray-2);
+        --bg-color: var(--color-bg);
+        --hi-width: 20px;
+        --hi-width3: calc(var(--hi-width) * 3);
+        --transparent: rgba(255,255,255,0); /* WebKit needs white transparent */
+        max-width: 100vw;
+        overflow-x: auto;
+        position: relative;
+        background-image: linear-gradient(to left, var(--bg-color) var(--hi-width), var(--transparent) var(--hi-width3)), linear-gradient(to left, var(--hi-color) 1px, var(--transparent) 2px, var(--hi-color2) 4px, var(--bg-color) var(--hi-width)), linear-gradient(to right, var(--bg-color) var(--hi-width), var(--transparent) var(--hi-width3)), linear-gradient(to right, var(--hi-color) 1px, var(--transparent) 2px, var(--hi-color2) 4px, var(--bg-color) var(--hi-width));
+        background-attachment: local, scroll, local, scroll;
+        background-position: right, right, left, left;
+        background-repeat: no-repeat;
+        background-size: var(--hi-width3) 100%;
+    }
+
+        .panel > .panel-heading {
+            /* WebKit still needs -webkit- prefix for sticky */
+            position: -webkit-sticky;
+            position: sticky;
+            left: 0;
+            top: 0;
+        }
+
+        .panel .table thead th {
+            white-space: nowrap;
+        }
+
+        .panel .table:not(:hover):not(:focus):not(:active) {
+            background: transparent;
+        }
+
+        .panel .table thead:not(:hover):not(:focus):not(:active) {
+            background: transparent;
+        }
+}
+
+/* Override the heavy patternfly headers */
+.table > thead {
+    background-image: none;
+    background-color: var(--color-bg);
+}
+
+/* Make things line up */
+.table tbody tr > :first-child,
+.table thead tr > :first-child {
+    padding-left: 1rem;
+}
+
+.table tbody tr > :last-child,
+.table thead tr > :last-child {
+    padding-right: 1rem;
+}
+
+label.onoff-ct {
+    --switch-width: 40px;
+    --switch-height: 24px;
+    --switch-background: var(--color-gray-3);
+    --switch-border-color: transparent;
+    --switch-border-style: solid;
+    --switch-border-width: 1px;
+    --switch-text: inherit;
+    --switch-dot-size: 14px;
+    --switch-dot: var(--color-bg);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 0;
+    padding: 1px 0;
+    /* Height is 24px; bump to 26px like other widgets */
+    vertical-align: middle;
+    /* Focus ring */
+    /* Don't show the focus ring for mouse clicks (when hovering) */
+    /* Subtly darken the inner part of the switch on hover */
+}
+
+    label.onoff-ct > .switch-on,
+    label.onoff-ct > .switch-off,
+    label.onoff-ct > input ~ .switch-toggle,
+    label.onoff-ct > input ~ .switch-toggle::after {
+        transition: all 300ms ease-in-out;
+    }
+
+    label.onoff-ct > .switch-on,
+    label.onoff-ct > .switch-off {
+        color: var(--switch-text);
+        margin-left: 0.5em;
+    }
+
+    label.onoff-ct > input {
+        opacity: 0;
+        position: absolute;
+        /* Base toggle graphic */
+        /* Hide unused switch label */
+    }
+
+        label.onoff-ct > input ~ .switch-toggle {
+            --switch-dot-offset-x: calc(var(--switch-dot-size)/3 - var(--switch-border-width));
+            --switch-dot-offset-y: calc(50% - 14px / 2);
+            /* Don't let the border draw over the background */
+            background-clip: content-box;
+            background: var(--switch-background);
+            border-radius: var(--switch-height);
+            border: var(--switch-border-width) var(--switch-border-style) var(--switch-border-color);
+            box-shadow: inset 0 0 0 1px transparent;
+            width: var(--switch-width);
+            height: var(--switch-height);
+            display: inline-block;
+            position: relative;
+            margin: 0;
+            cursor: pointer;
+            /* Dot graphic */
+        }
+
+            label.onoff-ct > input ~ .switch-toggle::after {
+                background: var(--switch-dot);
+                box-shadow: 0 0 var(--switch-dot-offset-x) rgba(0, 0, 0, 0.2);
+                display: inline-block;
+                content: "";
+                height: var(--switch-dot-size);
+                width: var(--switch-dot-size);
+                border-radius: 50%;
+                top: var(--switch-dot-offset-y);
+                left: var(--switch-dot-offset-x);
+                position: absolute;
+                pointer-events: none;
+            }
+
+        label.onoff-ct > input ~ .switch-off {
+            --switch-text: var(--color-subtle-copy);
+        }
+
+        label.onoff-ct > input:checked ~ .switch-toggle {
+            --switch-background: var(--color-link);
+            --switch-dot-offset-x: calc(100% - var(--switch-dot-size) * 1.333333 + var(--switch-border-width));
+            /* Modified for Cockpit ZFS Manager - New */
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10.583 6.35'%3E%3Cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-width='.529' d='M2.252 3.365l.756.758L4.48 2.65' opacity='.75'/%3E%3C/svg%3E");
+        }
+
+            label.onoff-ct > input:checked ~ .switch-toggle:last-child {
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10.583 6.35'%3E%3Cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-width='.529' d='M2.252 3.365l.756.758L4.48 2.65' opacity='.75'/%3E%3C/svg%3E");
+            }
+
+        label.onoff-ct > input:disabled ~ .switch-toggle {
+            --switch-background: var(--color-subtle-copy);
+            --switch-dot: var(--color-gray-3);
+        }
+
+        label.onoff-ct > input:disabled ~ * {
+            cursor: not-allowed;
+        }
+
+        label.onoff-ct > input:checked ~ .switch-off,
+        label.onoff-ct > input:not(:checked) ~ .switch-on {
+            display: none;
+        }
+
+    label.onoff-ct :disabled ~ .switch-on,
+    label.onoff-ct :disabled ~ .switch-off {
+        --switch-text: var(--color-subtle-copy);
+    }
+
+    label.onoff-ct :focus ~ .switch-toggle::before {
+        /* Approximate Chrome's focus ring, for non-Firefox browsers */
+        border: 2px solid rgba(0, 98, 220, 0.4);
+        border-radius: calc(var(--switch-width) - 10px);
+        position: absolute;
+        content: '';
+        top: -4px;
+        bottom: -4px;
+        left: -4px;
+        width: calc(var(--switch-width) + 6px);
+        transition: all 300ms ease-in-out;
+        /* HACK: Keyboard has nothing to transition from, but hover does */
+        /* (as it changes the ring to transparent and back). */
+        /* So we delay the hover to not have the focus ring on hover out. */
+        /* This makes the focus ring show up for keyboard users, but not on a mouse click. */
+        transition-delay: 600s;
+        z-index: 1;
+    }
+
+@-moz-document url-prefix() {
+    label.onoff-ct :focus ~ .switch-toggle::before {
+        /* Approximate Firefox's focus ring, for Firefox only */
+        border: 1px dotted rgba(0, 0, 0, 0.75);
+    }
+}
+
+label.onoff-ct :focus:hover ~ .switch-toggle::before {
+    border-color: transparent;
+}
+
+label.onoff-ct:hover :not(:disabled) ~ .switch-toggle {
+    box-shadow: inset 0 1px 5px 1px rgba(0, 0, 0, 0.15);
+}
+
+h1 label.onoff-ct {
+    vertical-align: bottom;
+}
+
+/* Form layout */
+:root {
+    --ct-form-columns: 2;
+}
+
+.ct-form {
+    align-self: start;
+    display: grid;
+    grid-gap: 0.5rem 1.5rem;
+    grid-template-columns: repeat(var(--ct-form-columns), max-content 1fr);
+    justify-items: stretch;
+    align-content: baseline;
+}
+
+    .ct-form > .control-label {
+        text-align: right;
+        padding: 0;
+        margin: 0;
+    }
+
+    .ct-form > :not(hr):not(p) {
+        line-height: 2.25rem;
+    }
+
+    .ct-form > p {
+        margin: 0;
+    }
+
+    .ct-form > :not(.control-label):not(hr):not(.ct-form-split):not(.ct-form-full) {
+        grid-column: 2 / -1;
+    }
+
+    .ct-form > :not(.ct-form-relax):not(.spinner) {
+        width: auto;
+    }
+
+    .ct-form > hr {
+        border: none;
+        grid-column: 1 / -1;
+        height: 0.5rem;
+        margin: 0;
+        padding: 0;
+    }
+
+    .ct-form > input[size],
+    .ct-form > .ct-validation-wrapper > input[size] {
+        justify-self: start;
+    }
+
+    .ct-form > .ct-validation-wrapper {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .ct-form input[type=number] {
+        -webkit-appearance: textarea;
+    }
+
+    .ct-form > input,
+    .ct-form > .ct-validation-wrapper > input,
+    .ct-form > textarea,
+    .ct-form > .ct-validation-wrapper > textarea,
+    .ct-form > select,
+    .ct-form > .ct-validation-wrapper > select,
+    .ct-form > .bootstrap-select,
+    .ct-form > .ct-validation-wrapper > .bootstrap-select,
+    .ct-form > .ct-select,
+    .ct-form > .ct-validation-wrapper > .ct-select,
+    .ct-form > .dropdown,
+    .ct-form > .ct-validation-wrapper > .dropdown,
+    .ct-form > .combobox-container,
+    .ct-form > .ct-validation-wrapper > .combobox-container,
+    .ct-form > fieldset,
+    .ct-form > .ct-validation-wrapper > fieldset,
+    .ct-form > [role=group],
+    .ct-form > .ct-validation-wrapper > [role=group],
+    .ct-form > [data-field],
+    .ct-form > .ct-validation-wrapper > [data-field],
+    .ct-form > .form-group,
+    .ct-form > .ct-validation-wrapper > .form-group,
+    .ct-form > .btn-group,
+    .ct-form > .ct-validation-wrapper > .btn-group,
+    .ct-form > label.checkbox,
+    .ct-form > .ct-validation-wrapper > label.checkbox,
+    .ct-form > label.radio,
+    .ct-form > .ct-validation-wrapper > label.radio,
+    .ct-form > .checkbox-inline,
+    .ct-form > .ct-validation-wrapper > .checkbox-inline,
+    .ct-form > .radio-inline,
+    .ct-form > .ct-validation-wrapper > .radio-inline {
+        line-height: var(--pf-global--LineHeight--md);
+    }
+
+    .ct-form > :not(.ct-form-relax):not(.spinner) {
+        width: auto !important;
+    }
+
+    .ct-form > [role=group],
+    .ct-form > .ct-validation-wrapper > [role=group] {
+        align-self: start;
+        align-content: center;
+        display: grid;
+        grid-gap: 0.5rem;
+        min-height: 2.25rem;
+        justify-content: start;
+        grid-template-columns: repeat(2, auto);
+    }
+
+        .ct-form > [role=group].ct-form-vertical > :not(.ct-form-split),
+        .ct-form > .ct-validation-wrapper > [role=group].ct-form-vertical > :not(.ct-form-split) {
+            grid-column: 1 / -1;
+        }
+
+        .ct-form > [role=group] > .checkbox,
+        .ct-form > .ct-validation-wrapper > [role=group] > .checkbox,
+        .ct-form > [role=group] > .radio,
+        .ct-form > .ct-validation-wrapper > [role=group] > .radio {
+            margin: 0;
+        }
+
+            .ct-form > [role=group] > .checkbox:first-child,
+            .ct-form > .ct-validation-wrapper > [role=group] > .checkbox:first-child,
+            .ct-form > [role=group] > .radio:first-child,
+            .ct-form > .ct-validation-wrapper > [role=group] > .radio:first-child {
+                margin-top: 0.5rem;
+            }
+
+        .ct-form > [role=group]:not(.ct-form-relax) > .dropdown,
+        .ct-form > .ct-validation-wrapper > [role=group]:not(.ct-form-relax) > .dropdown,
+        .ct-form > .ct-validation-wrapper > [data-field]:not(.ct-form-relax) > .dropdown {
+            width: auto !important;
+        }
+
+        .ct-form > [role=group]:not(.ct-form-relax) > .ct-select,
+        .ct-form > .ct-validation-wrapper > [role=group]:not(.ct-form-relax) > .ct-select,
+        .ct-form > .ct-validation-wrapper > [data-field]:not(.ct-form-relax) > .ct-select {
+            width: 100%;
+        }
+
+    .ct-form label.checkbox,
+    .ct-form label.radio,
+    .ct-form .checkbox > label,
+    .ct-form .radio > label,
+    .ct-form .checkbox-inline,
+    .ct-form .radio-inline {
+        display: inline-flex;
+        padding-left: 0;
+        padding-right: 1.5rem;
+        align-items: center;
+    }
+
+        .ct-form label.checkbox > input[type="checkbox"],
+        .ct-form label.radio > input[type="checkbox"],
+        .ct-form .checkbox > label > input[type="checkbox"],
+        .ct-form .radio > label > input[type="checkbox"],
+        .ct-form .checkbox-inline > input[type="checkbox"],
+        .ct-form .radio-inline > input[type="checkbox"],
+        .ct-form label.checkbox > input[type="radio"],
+        .ct-form label.radio > input[type="radio"],
+        .ct-form .checkbox > label > input[type="radio"],
+        .ct-form .radio > label > input[type="radio"],
+        .ct-form .checkbox-inline > input[type="radio"],
+        .ct-form .radio-inline > input[type="radio"] {
+            margin: 0 0.5em 0 0;
+            position: static;
+        }
+
+    .ct-form fieldset > .checkbox:first-child,
+    .ct-form fieldset > .radio:first-child {
+        margin-top: 0;
+    }
+
+    .ct-form fieldset > .checkbox:last-child,
+    .ct-form fieldset > .radio:last-child {
+        margin-bottom: 0;
+    }
+
+    .ct-form .list-group {
+        margin-bottom: 0.5rem;
+    }
+
+    .ct-form > .ct-form-split {
+        grid-column: auto / auto;
+    }
+
+    .ct-form > .ct-form-full {
+        grid-column: 1 / -1;
+    }
+
+    .ct-form > .help-block {
+        position: relative;
+        margin-top: -0.5rem;
+    }
+
+    .ct-form .help-block {
+        --help-line-height: calc(var(--pf-global--LineHeight--md) * 1rem);
+        line-height: var(--help-line-height);
+    }
+
+        .ct-form .help-block:empty {
+            display: none;
+        }
+
+        .ct-form .help-block .spinner {
+            position: relative;
+            top: calc((var(--help-line-height) - 16px - 2px) / 2);
+        }
+
+    .ct-form .ct-form-box {
+        background: var(--color-gray-1);
+        border-width: 1px;
+        border-style: solid;
+        border-color: var(--color-gray-5);
+        padding: 0.5rem;
+        padding-top: 1rem;
+        width: 100%;
+    }
+
+.ct-form-stretch {
+    justify-content: stretch !important;
+}
+
+.ct-form-relax {
+    justify-self: start;
+}
+
+.modal-dialog.modal-sm .ct-form > .ct-form-split {
+    grid-column: 2 / -1;
+}
+
+@media (max-width: 640px) {
+    .listing-ct-body,
+    .modal {
+        --ct-form-columns: 1;
+    }
+}
+
+.ct-form-minmax {
+    grid-template-columns: max-content min-content max-content 1fr;
+}
+
+.ct-form-maxmin {
+    grid-template-columns: max-content 1fr max-content min-content;
+}
+
+@media (max-width: 480px) {
+    .listing-ct-body .ct-form,
+    .modal .ct-form {
+        grid-template-columns: initial;
+    }
+
+        .listing-ct-body .ct-form > *,
+        .modal .ct-form > * {
+            grid-column: auto;
+            max-width: 100%;
+        }
+
+        .listing-ct-body .ct-form > .control-label,
+        .modal .ct-form > .control-label {
+            padding: 0;
+            text-align: left;
+        }
+
+            .listing-ct-body .ct-form > .control-label:not(:first-child),
+            .modal .ct-form > .control-label:not(:first-child) {
+                margin: 6px 0 0;
+            }
+
+        .listing-ct-body .ct-form > hr,
+        .modal .ct-form > hr {
+            height: 12px;
+        }
+}
+
+/* Listing pattern */
+.ct-listing {
+    font-size: var(--font-size-s);
+    min-width: 65%;
+    clear: both;
+}
+
+    .ct-listing > header {
+        display: flex;
+        align-items: center;
+        justify-content: start;
+        flex-flow: wrap;
+    }
+
+        .ct-listing > header > :only-child {
+            flex: auto;
+        }
+
+    .ct-listing + .ct-listing {
+        margin-top: 1rem;
+    }
+
+.listing-ct-heading,
+.listing-ct-actions {
+    margin: 0.5rem 0;
+}
+
+.listing-ct-heading {
+    flex: auto;
+    padding: 0.25rem 1em 0.25rem 0;
+}
+
+.ct-listing > table > thead h3 {
+    font-size: var(--pf-global--FontSize--2xl);
+    padding: 1rem 0;
+    font-weight: 400;
+    margin-top: 0;
+    position: relative;
+}
+
+    .ct-listing > table > thead h3 > .pull-right {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        right: 0;
+    }
+
+.ct-listing > table > thead td {
+    padding-top: 1rem;
+}
+
+.ct-listing > table > thead:first-child td {
+    padding-top: 0;
+}
+
+.ct-listing > table > thead td > a {
+    line-height: 30px;
+    padding: 0.5rem 0 0.5rem;
+}
+
+.ct-listing > table > thead th {
+    font-weight: normal;
+    padding: 0.5rem 1rem;
+    color: var(--color-subtle-copy);
+}
+
+    .ct-listing > table > thead th:first-child {
+        padding-left: 1rem;
+    }
+
+    .ct-listing > table > thead th:last-child {
+        text-align: right;
+    }
+
+/* A listing item is a row in the table */
+tbody > tr.listing-ct-item {
+    border: 1px solid transparent;
+    border-top: 1px solid var(--color-ct-list-border);
+    border-bottom: 1px solid var(--color-ct-list-border);
+    cursor: pointer;
+}
+
+.ct-listing > table > tbody:last-child {
+    border-bottom: 1px solid var(--color-ct-list-border);
+}
+
+.ct-listing > table > tbody + thead {
+    border-top: 1px solid var(--color-ct-list-border);
+}
+
+.ct-listing > table > tbody.open:last-child {
+    border-bottom: none;
+}
+
+.ct-listing > table > tbody.open + thead {
+    border-top: none;
+}
+
+tbody > tr.listing-ct-item.listing-ct-warning {
+    background-color: var(--color-ct-light-red-1);
+}
+
+tbody.open > tr.listing-ct-item,
+tbody.open > tr.listing-ct-panel {
+    background-color: var(--color-ct-list-active-bg);
+    border-bottom: none;
+    border-top: none;
+    border-left: 1px solid var(--color-light-gray);
+    border-right: 1px solid var(--color-light-gray);
+    transition: all 200ms;
+}
+
+    tbody.open > tr.listing-ct-item td,
+    tbody.open > tr.listing-ct-item th {
+        border-top: 1px solid var(--color-light-gray);
+    }
+
+tbody.open td div.listing-ct-head {
+    background-color: #fff;
+}
+
+tbody.open > .listing-ct-panel > td > .listing-ct-body {
+    border: none;
+    /* Modified for Cockpit ZFS Manager - Original: overflow: auto; */
+    /* Do not display scrollbars when actions menu is open */
+    overflow: inherit;
+    /* Modified for Cockpit ZFS Manager - New */
+    overflow-y: visible;
+}
+
+tbody.open > tr.listing-ct-panel + tr.listing-ct-body {
+    border-top: none;
+}
+
+tbody.open > tr.listing-ct-panel td div.listing-ct-head {
+    border: none;
+    border-bottom: 1px solid var(--color-light-gray);
+}
+
+/* only highlight the row if navigation is available */
+tbody:not(.open) > tr.listing-ct-item:not(.listing-ct-nonavigate):hover {
+    background-color: var(--color-ct-list-hover-bg);
+}
+
+/* if we can't navigate to a row but expand is available, highlight the caret */
+tbody:not(.open) > tr.listing-ct-item.listing-ct-nonavigate:hover td.listing-ct-toggle {
+    color: var(--color-ct-list-hover-icon);
+}
+
+/* use hover color expanded rows even if navigation isn't available */
+tbody.open > tr.listing-ct-item:hover,
+/* Modified for Cockpit ZFS Manager - Original: tr.listing-ct-item.listing-ct-nonavigate:hover */
+tr.listing-ct-item.listing-ct-nonavigate:not(.listing-ct-storagepoolsnotfound):hover {
+    background-color: var(--color-ct-list-hover-bg);
+}
+
+tr.listing-ct-item .listing-ct-toggle:not(:empty) {
+    width: 35px;
+    color: #393f44;
+}
+
+/* Highlight toggle color when hovered or if the row is open */
+.listing-ct-toggle:hover,
+tbody.open .listing-ct-toggle {
+    color: var(--color-ct-list-active-bg);
+}
+
+.listing-ct > thead > tr > .listing-ct-toggle + th,
+.listing-ct-item > .listing-ct-toggle + td,
+.listing-ct-item > .listing-ct-toggle + th {
+    padding-left: 0.25rem;
+    position: relative;
+}
+
+td.listing-ct-toggle i {
+    font-size: 17px;
+}
+
+    td.listing-ct-toggle i:before {
+        position: relative;
+        content: "\F105";
+        display: block;
+    }
+
+tbody.open td.listing-ct-toggle i:before {
+    content: "\F107";
+    animation: listingCtToggleOpen 100ms ease-in-out;
+    top: 1px;
+}
+
+@keyframes listingCtToggleOpen {
+    0% {
+        transform-origin: 50% 50%;
+        transform: translate(0, -1px) rotate(-90deg);
+    }
+
+    100% {
+        transform: translate(0, 0) rotate(0);
+    }
+}
+
+/* Listing items have decent padding ... */
+.listing-ct > thead > tr > th,
+tr.listing-ct-item > th,
+tr.listing-ct-item > td {
+    padding: 0.75rem;
+    vertical-align: text-top;
+    /* baseline doesn't support wrapped lines */
+}
+
+    tr.listing-ct-item > td > .btn {
+        /* .btn has padding of 6px and 1px border */
+        margin-top: -7px;
+        margin-bottom: -7px;
+    }
+
+    tr.listing-ct-item > td > .btn-control-ct {
+        /* Adapt for Cockpit's modified button, which is larger by 8px */
+        margin-top: -3px;
+        margin-bottom: -3px;
+    }
+
+/* Listing actions can be used directly as a cell */
+tr.listing-ct-item td.listing-ct-actions,
+td.listing-ct-actions {
+    padding: 0.25rem 0.5rem;
+    text-align: right;
+    float: none;
+}
+/* if the entire row is selected, highlight */
+tr.listing-ct-item.listing-ct-selected {
+    background-color: #0088ce;
+    color: #fff;
+    border-color: #007ebf;
+}
+
+    tr.listing-ct-item.listing-ct-selected:hover {
+        background-color: #007ebf;
+        border-color: #007ebf;
+    }
+
+    tr.listing-ct-item.listing-ct-selected .badge {
+        background-color: #00537e;
+    }
+
+        tr.listing-ct-item.listing-ct-selected .badge:hover {
+            background-color: #003e5f;
+        }
+
+.listing-ct-head .listing-ct-actions {
+    margin-top: -7px;
+    order: -1;
+}
+
+/* Modified for Cockpit ZFS Manager - Original: tr.listing-ct-item td:last-child */
+.ct-listing > table > tbody > tr > td:last-child:not(:first-child) {
+    text-align: right;
+}
+
+div.listing-ct-panel {
+    box-shadow: 1px 1px 1px 1px #f5f5f5;
+    margin-bottom: 1rem;
+}
+
+div.listing-ct-maybe {
+    border: 1px dashed var(--color-light-gray-3);
+    box-shadow: none;
+}
+
+div.listing-ct-head {
+    padding: 0.5rem 0.5rem 0 0.5rem;
+    background-color: #f5f5f5;
+    border-color: var(--color-light-gray);
+    border-style: solid;
+    border-width: 1px 1px 0 1px;
+    overflow: hidden;
+    display: flex;
+    flex-flow: row-reverse wrap;
+    align-items: center;
+}
+
+    div.listing-ct-head:last-child {
+        padding-bottom: 0.5rem;
+    }
+
+div.listing-ct-maybe div.listing-ct-head,
+div.listing-ct-maybe div.listing-ct-body {
+    background-color: #fff;
+    border: none;
+}
+
+tbody.active .listing-ct-head {
+    border-top: 3px solid var(--color-link);
+}
+
+.listing-ct-head h3 {
+    font-weight: normal;
+    font-size: 18px;
+    margin-top: 0px;
+    margin-left: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+    .listing-ct-head h3 i {
+        float: left;
+        padding-right: 7px;
+    }
+
+.listing-ct-head .nav li a {
+    font-size: 13px;
+    /* Counteract listing-ct-head padding */
+    margin-top: -0.5rem;
+    margin: 0;
+}
+
+.listing-ct-head .nav-tabs {
+    border-bottom: none;
+}
+
+.listing-ct-head .nav-tabs-pf {
+    /* Counteract listing-ct-head padding */
+    margin: -0.5rem 0 0 -0.5rem;
+    flex: auto;
+}
+
+/* To display info instead of tabs */
+.listing-ct-head dl {
+    display: inline-block;
+    height: 1.6em;
+    margin-bottom: 5px;
+    white-space: nowrap;
+    margin-right: 45px;
+    margin-left: 5px;
+}
+
+.listing-ct-head dt {
+    font-weight: normal;
+    display: inline;
+    margin-right: 0.5em;
+    color: var(--color-subtle-copy);
+}
+
+.listing-ct-head dd {
+    display: inline;
+    color: black;
+}
+
+.listing-ct-body {
+    /* Modified for Cockpit ZFS Manager - Original: padding: 1rem 1.5rem; */
+    padding: 0px;
+    border: 1px solid var(--color-light-gray);
+    background-color: #fff;
+}
+
+.listing-ct-inline > td > .listing-ct-body {
+    border: none;
+    padding-top: 0px;
+    padding-left: 1rem;
+    padding-bottom: 0px;
+}
+
+.listing-ct-inline > h3 {
+    border-top: 1px solid var(--color-light-gray);
+    padding-top: 20px;
+    margin-top: 30px;
+}
+
+    .listing-ct-inline > h3:first-child {
+        border-top: none;
+        padding-top: 0px;
+        margin-top: 20px;
+    }
+
+.listing-ct-actions {
+    float: right;
+    min-height: 26px;
+}
+
+.listing-ct-status {
+    float: right;
+    clear: right;
+}
+
+.listing-ct-error {
+    border-top: 1px solid var(--color-light-gray);
+    border-left: 1px solid var(--color-light-gray);
+    border-right: 1px solid var(--color-light-gray);
+}
+
+    .listing-ct-error.alert {
+        margin-bottom: 0;
+    }
+
+.listing-ct-body tt {
+    font-size: 12px;
+}
+
+.listing-ct-body dl {
+    margin: 0;
+}
+
+    .listing-ct-body dl dd dl.inline-dl dt,
+    .listing-ct-body dt {
+        clear: left;
+        float: left;
+        width: 100px;
+        min-height: 26px;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        color: var(--color-subtle-copy);
+        font-weight: normal;
+    }
+
+.listing-ct-body dt {
+    text-align: right;
+}
+
+.listing-ct-body dl dd dl dt {
+    text-align: left;
+}
+
+.listing-ct-body dd {
+    margin-left: 110px;
+    min-height: 26px;
+    max-width: 1000px;
+    text-overflow: ellipsis;
+}
+
+.listing-ct-body dl.full-width dt {
+    text-align: left;
+    min-width: none;
+    max-width: none;
+    float: none;
+    width: auto;
+}
+
+.listing-ct-body dl.full-width dd {
+    margin-left: 0px;
+}
+
+.ct-listing > table > tbody > tr > td:first-child {
+    position: relative;
+    transition: all 100ms ease-out;
+}
+
+    .ct-listing > table > tbody > tr > td:first-child::before,
+    .ct-listing > table > tbody > tr > td:first-child::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 300ms;
+    }
+
+    .ct-listing > table > tbody > tr > td:first-child::after {
+        right: auto;
+        width: 0;
+        background-color: var(--pf-global--active-color--100);
+    }
+
+.ct-listing > table > tbody > tr:not(:first-child) > td:first-child::after {
+    top: -1px;
+}
+
+.ct-listing > table > tbody.open > tr > td:first-child {
+    transition: all 100ms ease-in;
+}
+
+    .ct-listing > table > tbody.open > tr > td:first-child::before,
+    .ct-listing > table > tbody.open > tr > td:first-child::after {
+        opacity: 1;
+    }
+
+    .ct-listing > table > tbody.open > tr > td:first-child::after {
+        width: 3px;
+    }
+
+.ct-listing > table > tbody.open {
+    transition: all 100ms ease-in;
+    box-shadow: 0 0.3125rem 0.625rem -0.25rem rgba(3, 3, 3, 0.25);
+}
+
+/* By default these are hidden */
+/* (HACK: Special-case the user auth dialog) */
+tbody:not(.ssh-key-body) > tr.listing-ct-head,
+tbody > tr.listing-ct-panel,
+tbody > tr.listing-ct-body {
+    display: none;
+}
+
+    tbody:not(.ssh-key-body) > tr.listing-ct-head > td,
+    tbody > tr.listing-ct-panel > td,
+    tbody > tr.listing-ct-body > td {
+        /* Compensate for the left-side blue highlight */
+        padding-left: 3px;
+    }
+
+/* ... unless they are in the right state */
+tbody.open > tr.listing-ct-head,
+tbody.open > tr.listing-ct-panel,
+tbody.open > tr.listing-ct-body {
+    display: table-row;
+}
+
+/* Animate the listing head & the last visible body */
+/* (Switching tabs will adds new listing-ct-bodys & toggle visibility) */
+tbody.open div.listing-ct-head,
+tbody.open div.listing-ct-head + div.listing-ct-body:not([hidden]):last-child {
+    animation: listingCtShow 100ms ease-in-out;
+}
+
+@keyframes listingCtShow {
+    0% {
+        margin-bottom: 0;
+        margin-top: 0;
+        max-height: 0;
+        opacity: 0;
+        padding-bottom: 0;
+        padding-top: 0;
+        line-height: 0;
+    }
+
+    50% {
+        opacity: 0;
+        line-height: 1;
+    }
+
+    100% {
+        max-height: 100vh;
+        opacity: 1;
+    }
+}
+
+/* Turn off animation if requested by the browser/OS (where supported) */
+@media (prefers-reduced-motion: reduce) {
+    tbody.open td.listing-ct-toggle i:before,
+    tbody.open div.listing-ct-head,
+    tbody.open div.listing-ct-body {
+        animation: none;
+    }
+}
+
+tbody.open tr.listing-ct-head {
+    border-color: var(--color-light-gray);
+    border-style: solid;
+    border-width: 1px 1px 0 1px;
+    border-top: 3px solid var(--color-link);
+    background-color: #f5f5f5;
+}
+
+tr.listing-ct-head + tr.listing-ct-head {
+    border-top: none;
+}
+
+    tr.listing-ct-head + tr.listing-ct-head td {
+        padding: 0px 0.5rem 0px 0.5rem;
+    }
+
+tr.listing-ct-body td {
+    padding: 1rem 1.5rem;
+    font-size: var(--font-size-s);
+}
+
+.listing-ct-empty {
+    color: var(--color-subtle-copy);
+    text-align: center;
+    border-top: 1px solid var(--color-gray-2);
+    border-bottom: 1px solid var(--color-gray-2);
+}
+
+/* Used at the end of a group of tbody to show an 'empty' message */
+thead.listing-ct-empty td,
+.ct-listing > table > thead.listing-ct-empty td {
+    padding: 0.5rem;
+}
+
+tbody + thead.listing-ct-empty {
+    display: none;
+}
+
+/* Listing pattern defaults to using full width of parent */
+.listing-ct-wide {
+    width: 100%;
+}
+
+/* Listing pattern mod to redce the padding */
+.listing-ct-compact > thead > tr > th,
+.listing-ct-compact > tbody > tr > th,
+.listing-ct-compact > tbody > tr > td {
+    padding: 0.25rem;
+}
+
+.listing-ct-compact > tbody > tr > .listing-ct-toggle:not(:empty) + th,
+.listing-ct-compact > tbody > tr > .listing-ct-toggle:not(:empty) + td {
+    padding-left: 0.25rem;
+}
+
+    .listing-ct-compact > tbody > tr > .listing-ct-toggle:not(:empty) + th::before,
+    .listing-ct-compact > tbody > tr > .listing-ct-toggle:not(:empty) + td::before {
+        top: 0.25rem;
+    }
+
+div.listing-ct-head {
+    overflow: visible;
+}
+
+.listing-ct-head .btn-group,
+.listing-ct-head button:not(.dropdown-toggle) {
+    margin-left: 0.3em;
+}
+
+tbody tr.listing-ct-noexpand {
+    cursor: default;
+}
+
+/* Fix up nav-tabs-pf to work properly */
+.nav-tabs-pf > li:first-child a {
+    margin-left: 0px !important;
+    padding-left: 1rem !important;
+}
+
+.nav-tabs-pf > li a:before {
+    right: 0px !important;
+}
+
+.nav-tabs-pf > li > a:active:before,
+.nav-tabs-pf > li > a:focus:before,
+.nav-tabs-pf > li > a:hover:before,
+.nav-tabs-pf > li.active a:before {
+    height: 3px;
+    left: 0px;
+}
+
+/* Force word-wraps when words are too long */
+.listing-ct-item td,
+.listing-ct-item th,
+.listing-ct-body {
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+.listing-ct-item td,
+.listing-ct-item th {
+    max-width: calc(100vw - 18rem);
+}
+
+.listing-ct-body {
+    /* 42 = (20px padding + 1px border) * 2 */
+    max-width: calc(100vw - 42px);
+}

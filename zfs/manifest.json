@@ -1,0 +1,21 @@
+{
+  "version": 0.1,
+  "name": "zfs",
+  "priority": 100,
+  "requires": {
+    "cockpit": "201"
+  },
+  "menu": {
+    "index": {
+      "label": "ZFS",
+      "order": 31,
+      "keywords": [
+        {
+          "matches": [ "@feature", "alt root", "checksum", "clone", "dataset", "deduplication", "disk", "drive", "encryption", "features", "mount", "nfs", "pool", "raid-z", "refreservation", "resilver", "samba", "scrub", "snapshot", "storage pool", "trim", "unmount", "vdev", "raidz", "virtual device", "zfs manager", "zfs", "zpool", "filesystem" ]
+        }
+      ]
+
+    }
+  },
+  "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'"
+}
