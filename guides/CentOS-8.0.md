@@ -12,7 +12,7 @@ Remove old version of Cockpit if version is less than 201 and install latest Coc
 
 ```bash
 $ sudo dnf remove cockpit*
-$ sudo dnf config-manager --add-repo https://copr.fedorainfracloud.org/coprs/g/cockpit/cockpit-preview/repo/rhelbeta-8/group_cockpit-cockpit-preview-rhelbeta-8.repo
+$ sudo dnf config-manager --add-repo https://copr.fedorainfracloud.org/coprs/g/cockpit/cockpit-preview/repo/epel-8/group_cockpit-cockpit-preview-epel-8.repo
 
 $ sudo dnf install cockpit cockpit-storaged setroubleshoot-server
 ```
