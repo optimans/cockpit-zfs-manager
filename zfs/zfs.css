@@ -236,6 +236,11 @@ fieldset[disabled] .btn {
     word-break: break-all;
 }
 
+.select-ct-pool-row-physec {
+    font-size: var(--pf-global--FontSize--xs);
+    margin-left: 0px !important;
+}
+
 .select-ct-filesystem-row {
     align-items: center;
     cursor: pointer;
