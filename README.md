@@ -22,7 +22,9 @@ Ensure all critical data is adequately backed up before use.
 * CentOS Linux 8.0
 * Debian 10.0
 * Oracle Linux Server 8.0
+* Proxmox VE 6.0
 * Red Hat Enterprise Linux 8.0
+* Ubuntu 18.04 LTS
 * Ubuntu 19.10
 
 ## Installation
@@ -30,7 +32,8 @@ Ensure all critical data is adequately backed up before use.
 Copy zfs folder to cockpit
 
 ```bash
-$ sudo cp -r zfs /usr/share/cockpit
+$ git clone https://github.com/optimans/cockpit-zfs-manager.git
+$ sudo cp -r cockpit-zfs-manager/zfs /usr/share/cockpit
 ```
 
 #### Samba
@@ -82,8 +85,10 @@ New storage pools are created with the following properties set (not visible in 
  * aclinherit=passthrough
  * acltype=posixacl
  * casesensitivity=sensitive
+ * normalization=formD
  * sharenfs=off
  * sharesmb=off
+ * utf8only=on
  * xattr=sa
 
 #### File Systems
