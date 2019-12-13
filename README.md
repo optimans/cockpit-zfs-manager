@@ -19,8 +19,10 @@ Ensure all critical data is adequately backed up before use.
 
 #### Tested Distributions:
 
+* Arch Linux
 * CentOS Linux 8.0
 * Debian 10.0
+* Fedora 31
 * Oracle Linux Server 8.0
 * Proxmox VE 6.0
 * Red Hat Enterprise Linux 8.0
