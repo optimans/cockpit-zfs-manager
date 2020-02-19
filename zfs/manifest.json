@@ -1,5 +1,5 @@
 {
-  "version": 0.1,
+  "version": "0.2",
   "name": "zfs",
   "priority": 100,
   "requires": {
@@ -11,11 +11,11 @@
       "order": 31,
       "keywords": [
         {
-          "matches": [ "@feature", "alt root", "checksum", "clone", "dataset", "deduplication", "disk", "drive", "encryption", "features", "filesystem", "mount", "nfs", "pool", "raid-z", "refreservation", "resilver", "samba", "share", "scrub", "snapshot", "storage pool", "trim", "unmount", "vdev", "raidz", "virtual device", "zfs manager", "zfs", "zpool" ]
+          "matches": [ "@feature", "alt root", "cache", "checksum", "clone", "dataset", "deduplication", "disk", "drive", "encryption", "features", "filesystem", "mirror", "mount", "nfs", "pool", "raid-z", "refreservation", "resilver", "samba", "share", "scrub", "snapshot", "spare", "special", "storage pool", "trim", "unmount", "vdev", "raidz", "virtual device", "zfs manager", "zfs", "zpool" ]
         }
       ]
 
     }
   },
-  "content-security-policy": "default-src 'self'; script-src 'self' 'nonce-1t55lZ7tzuKTreHVNwE66Ox32Mc='; style-src 'self'"
+  "content-security-policy": "connect-src 'self' https://api.github.com/repos/optimans/cockpit-zfs-manager/releases; default-src 'self'; script-src 'self' 'nonce-1t55lZ7tzuKTreHVNwE66Ox32Mc='; style-src 'self'"
 }

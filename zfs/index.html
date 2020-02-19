@@ -2,7 +2,7 @@
 <!--
  * This file is part of Cockpit ZFS Manager.
  *
- * Copyright (C) 2019 OPTIMANS Pty Ltd.
+ * Copyright (C) 2019-2020 OPTIMANS Pty Ltd.
  *
  * Cockpit ZFS Manager is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -38,7 +38,8 @@
 <body>
     <div id="alerts-requirements" class="blank-slate-pf blank-slate-ct hidden"></div>
     <div id="container" class="container-fluid hidden">
-        <div id="alerts-notifications" class="toast-notifications-list-pf"></div>
+        <ul id="alerts-notifications" class="pf-c-alert-group pf-m-toast"></ul>
+        <div id="alerts-notifications-legacy" class="toast-notifications-list-pf"></div>
         <div>
             <section class="ct-listing">
                 <header>

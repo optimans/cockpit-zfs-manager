@@ -1,7 +1,7 @@
 /*
  * This file is part of Cockpit ZFS Manager.
  *
- * Copyright (C) 2019 OPTIMANS Pty Ltd.
+ * Copyright (C) 2019-2020 OPTIMANS Pty Ltd.
  *
  * Cockpit ZFS Manager is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by the
@@ -23,6 +23,7 @@
 let zfsmanager = {
     cockpit: {
         datelocale: (navigator.languages && navigator.languages.length ? navigator.languages[0] : (navigator.userLanguage || navigator.language || navigator.browserLanguage || cockpit.language)),
+        legacy: false,
         permission: null
     },
     configuration: {
@@ -37,9 +38,13 @@ let zfsmanager = {
             manage: false, //Manage Samba shares
             windowscompatibility: true //Disable special characters in share name that don't work with Microsoft Windows
         },
+        updates: {
+            check: true //Check for updates on launch
+        },
         zfs: {
             filesystem: {
                 cloneorigin: false, //Display clone origin in tooltip
+                quotarestrict: true, //Restrict quota maximum to size of storage pool
                 readonlylockdown: false, //Prevent changes to read only file systems and clone file systems
                 snapshotactions: true, //Display snapshot actions in file system actions menu
             },
@@ -64,12 +69,15 @@ let zfsmanager = {
         configuration: false,
         name: ""
     },
-    version: "0.1.1.158",
+    version: "0.2.0.233",
     zfs: {
         storagepool: {
             boot: "",
             root: "",
             refreshid: []
+        },
+        warnings: {
+            nvmevdev: false
         },
         version: null
     }
@@ -92,6 +100,10 @@ $(document).ready(function () {
     $("body").tooltip({
         html: "true",
         selector: `[data-toggle="tooltip"]`
+    });
+
+    $(cockpit.info).on("changed", function () {
+        zfsmanager.cockpit.legacy = (cockpit.info["version"] < 207 ? true : false);
     });
 });
 
@@ -136,6 +148,9 @@ function FnFirstSteps() {
 
     FnModalsRegister();
     FnStoragePoolsGet();
+
+    FnVersionWarning();
+    FnZfsVersionWarnings()
 }
 
 function FnFirstStepsPrivileged() {
@@ -154,6 +169,9 @@ function FnFirstStepsPrivileged() {
             FnSambaManage();
         }
         FnSambaUsersharesDirectoryCreate();
+        if (zfsmanager.configuration.updates.check) {
+            FnUpdatesCheck({ alert: true });
+        }
     }
 }
 
@@ -335,45 +353,181 @@ function FnDateTimeSnapshot(data = { date }) {
 
 //#endregion
 
-//#region Display Notification
+//#region Display Alert
 
-function FnDisplayNotification(notification = { status, title, message }, toast = { name, id }) {
-    toast.date = (new Date).getTime();
+function FnDisplayAlert(notification = { status, title, description, breakword: false }, toast = { name, id, timeout: 4 }) {
+    if (zfsmanager.cockpit.legacy) { //Dirty way of handling alerts for PF3 and PF4
+        FnDisplayAlertLegacy({ status: notification.status, title: notification.title, description: notification.description, breakword: notification.breakword }, { name: toast.name, id: toast.id, timeout: toast.timeout });
+
+        return;
+    }
+
+    toast.timeout = ($.isNumeric(toast.timeout) ? toast.timeout : 4);
+    toast.uniqueid = (new Date).getTime() + "-" + Math.round(Math.random() * 20);
+
+    switch (notification.status) {
+        case "danger":
+            toast.icon = "fa fa-exclamation-circle";
+            toast.statusaria = "Danger";
+            break;
+        case "info":
+            toast.icon = "fa fa-info-circle";
+            toast.statusaria = "Information";
+            break;
+        case "success":
+            toast.icon = "fa fa-check-circle";
+            toast.statusaria = "Success";
+            break;
+        case "warning":
+            toast.icon = "fa fa-exclamation-triangle";
+            toast.statusaria = "Warning";
+            break;
+        default:
+            notification.status = "";
+            toast.icon = "fa fa-bell";
+            toast.statusaria = "Default";
+            break;
+    }
+
+    notification.output = `
+        <li id="alert-` + toast.name + (toast.id ? `-` + toast.id : ``) + `-` + toast.uniqueid + `">
+            <div aria-label="` + toast.statusaria + ` alert" class="pf-c-alert ` + (notification.status ? `pf-m-` + notification.status : ``) + `">
+                <div class="pf-c-alert__icon">
+                    <i aria-hidden="true" class="` + toast.icon + `"></i>
+                </div>
+                <h4 class="pf-c-alert__title"><span class="pf-screen-reader">` + toast.statusaria + ` alert:</span>` + notification.title + `</h4>
+                ` + (notification.description ? `<div class="pf-c-alert__description ` + (notification.breakword ? `break-word` : ``) + `"><p>` + notification.description + `</p></div>` : ``) + `
+                <div class="pf-c-alert__action">
+                    <button aria-label="Close ` + toast.statusaria + ` alert: ` + notification.title + `" class="pf-c-button pf-m-plain" type="button">
+                        <i aria-hidden="true" class="fa fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+		    \x3Cscript nonce="1t55lZ7tzuKTreHVNwE66Ox32Mc=">
+                $("#alert-` + toast.name + (toast.id ? `-` + toast.id : ``) + `-` + toast.uniqueid + ` .pf-c-alert__action").on("click",".pf-c-button",function(){
+                    $("#alert-` + toast.name + (toast.id ? `-` + toast.id : ``) + `-` + toast.uniqueid + `").fadeTo(150, 0).slideUp(150, function () {
+                        $(this).remove();
+                    });
+                });
+
+			    setTimeout(function () {
+				    $("#alert-` + toast.name + (toast.id ? `-` + toast.id : ``) + `-` + toast.uniqueid + `").fadeTo(500, 0).slideUp(500, function () {
+					    $(this).remove();
+				    });
+			    }, ` + toast.timeout + `000);
+		    \x3C/script>
+        </li>
+    `;
+
+    $("#alerts-notifications").append(notification.output);
+}
+
+function FnDisplayAlertLegacy(notification = { status, title, description, breakword: false }, toast = { name, id, timeout: 4 }) {
+    toast.timeout = ($.isNumeric(toast.timeout) ? toast.timeout : 4);
+    toast.uniqueid = (new Date).getTime() + "-" + Math.round(Math.random() * 20);
 
     switch (notification.status) {
         case "danger":
             toast.icon = "pficon pficon-error-circle-o";
             break;
-        case "warning":
-            toast.icon = "pficon pficon-warning-triangle-o";
-            break;
         case "success":
             toast.icon = "pficon pficon-ok";
             break;
+        case "warning":
+            toast.icon = "pficon pficon-warning-triangle-o";
+            break;
         default:
-            toast.icon = "pficon pficon-info";
+            notification.status = "info";
+            toast.icon = "pficon pficon-info";            
             break;
     }
 
     notification.output = `
-        <div id="toast-` + toast.name + `-` + toast.id + `-` + toast.date + `"class="toast-pf alert alert-` + notification.status + ` alert-dismissable">
+        <div id="toast-` + toast.name + (toast.id ? `-` + toast.id : ``) + `-` + toast.uniqueid + `" class="toast-pf alert alert-` + notification.status + ` alert-dismissable">
             <button aria-hidden="true" class="close" data-dismiss="alert" tabIndex="-1" type="button">
                 <span aria-hidden="true" class="pficon pficon-close"></span>
             </button>
             <span aria-hidden="true" class="` + toast.icon + `"></span>
-            <span><strong>` + notification.title + (notification.message ? `:` : ``) + `</strong> <span class="toast-ct-message">` + (notification.message ? notification.message : ``) + `</span></span>
+            <span><strong>` + notification.title + (notification.description ? `:` : ``) + `</strong> <span class="toast-ct-description ` + (notification.breakword ? `break-word` : ``) + `">` + (notification.description ? notification.description : ``) + `</span></span>
 
 		    \x3Cscript nonce="1t55lZ7tzuKTreHVNwE66Ox32Mc=">
 			    setTimeout(function () {
-				    $("#toast-` + toast.name + `-` + toast.id + `-` + toast.date + `").fadeTo(500, 0).slideUp(500, function () {
+				    $("#toast-` + toast.name + (toast.id ? `-` + toast.id : ``) + `-` + toast.uniqueid + `").fadeTo(500, 0).slideUp(500, function () {
 					    $(this).remove();
 				    });
-			    }, 4000);
+			    }, ` + toast.timeout + `000);
 		    \x3C/script>
         </div>
     `;
 
-    $("#alerts-notifications").append(notification.output);
+    $("#alerts-notifications-legacy").append(notification.output);
+}
+
+function FnDisplayInlineAlert(notification = { status, title, description }, inline = { name, id, hidden: false }) {
+    if (zfsmanager.cockpit.legacy) { //Dirty way of handling alerts for PF3 and PF4
+        return FnDisplayInlineAlertLegacy({ status: notification.status, title: notification.title, description: notification.description }, { name: inline.name, id: inline.id, hidden: inline.hidden });
+    }
+
+    switch (notification.status) {
+        case "danger":
+            inline.icon = "fa fa-exclamation-circle";
+            inline.statusaria = "Danger";
+            break;
+        case "info":
+            inline.icon = "fa fa-info-circle";
+            inline.statusaria = "Information";
+            break;
+        case "success":
+            inline.icon = "fa fa-check-circle";
+            inline.statusaria = "Success";
+            break;
+        case "warning":
+            inline.icon = "fa fa-exclamation-triangle";
+            inline.statusaria = "Warning";
+            break;
+        default:
+            notification.status = "";
+            inline.icon = "fa fa-bell";
+            inline.statusaria = "Default";
+            break;
+    }
+
+    notification.output = `
+        <div ` + (inline.name ? `id="alert-` + inline.name + (inline.id ? `-` + inline.id : ``) + `"` : ``) + ` class="pf-c-alert pf-m-inline ` + (notification.status ? `pf-m-` + notification.status : ``) + ` ` + (inline.hidden ? `hidden` : ``) + `" aria-label="Inline ` + inline.statusaria + ` alert">
+	        <div class="pf-c-alert__icon">
+		        <i class="` + inline.icon + `" aria-hidden="true"></i>
+	        </div>
+	        <h4 class="pf-c-alert__title"><span class="pf-screen-reader">` + inline.statusaria + ` inline alert:</span>` + notification.title + `</h4>
+            ` + (notification.description ? `<div class="pf-c-alert__description"><p>` + notification.description + `</p></div>` : ``) + `
+        </div>
+    `;
+
+    return notification.output;
+}
+
+function FnDisplayInlineAlertLegacy(notification = { status, title, description }, inline = { name, id, hidden: false }) {
+    switch (notification.status) {
+        case "danger":
+            inline.icon = "pficon pficon-error-circle-o";
+            break;
+        case "success":
+            inline.icon = "pficon pficon-ok";
+            break;
+        case "warning":
+            inline.icon = "pficon pficon-warning-triangle-o";
+            break;
+        default:
+            notification.status = "info";
+            inline.icon = "pficon pficon-info";
+            break;
+    }
+
+    notification.output = `
+        <div ` + (inline.name ? `id="alert-` + inline.name + (inline.id ? `-` + inline.id : ``) + `"` : ``) + ` class="alert ` + (notification.status ? `alert-` + notification.status : ``) + ` ` + (inline.hidden ? `hidden` : ``) + `"><span class="` + inline.icon + `"></span><span>` + notification.title + (notification.description ? `: ` + notification.description : ``) + `</span></div>
+    `;
+
+    return notification.output;
 }
 
 //#endregion
@@ -446,10 +600,14 @@ function FnConfigurationGet() {
                 user.samba.manage = (user.samba.manage === undefined ? zfsmanager.configuration.samba.manage : user.samba.manage);
                 user.samba.windowscompatibility = (user.samba.windowscompatibility === undefined ? zfsmanager.configuration.samba.windowscompatibility : user.samba.windowscompatibility);
 
+                user.updates = (user.updates === undefined ? zfsmanager.configuration.updates : user.updates);
+                user.updates.check = (user.updates.check === undefined ? zfsmanager.configuration.updates.check : user.updates.check);
+
                 user.zfs = (user.zfs === undefined ? zfsmanager.configuration.zfs : user.zfs);
                 user.zfs.filesystem = (user.zfs.filesystem === undefined ? zfsmanager.configuration.zfs.filesystem : user.zfs.filesystem);
                 user.zfs.filesystem.snapshotactions = (user.zfs.filesystem.snapshotactions === undefined ? zfsmanager.configuration.zfs.filesystem.snapshotactions : user.zfs.filesystem.snapshotactions);
                 user.zfs.filesystem.cloneorigin = (user.zfs.filesystem.cloneorigin === undefined ? zfsmanager.configuration.zfs.filesystem.cloneorigin : user.zfs.filesystem.cloneorigin);
+                user.zfs.filesystem.quotarestrict = (user.zfs.filesystem.quotarestrict === undefined ? zfsmanager.configuration.zfs.filesystem.quotarestrict : user.zfs.filesystem.quotarestrict);
                 user.zfs.filesystem.readonlylockdown = (user.zfs.filesystem.readonlylockdown === undefined ? zfsmanager.configuration.zfs.filesystem.readonlylockdown : user.zfs.filesystem.readonlylockdown);
                 user.zfs.status = (user.zfs.status === undefined ? zfsmanager.configuration.zfs.status : user.zfs.status);
                 user.zfs.status.errorcolors = (user.zfs.status.errorcolors === undefined ? zfsmanager.configuration.zfs.status.errorcolors : user.zfs.status.errorcolors);
@@ -477,7 +635,7 @@ function FnConfigurationGet() {
         });
 };
 
-function FnConfigure(user = { cockpit: { manage: true }, disks: { base2: false }, loglevel: 1, samba: { manage: true, windowscompatibility: true }, zfs: { filesystem: { cloneorigin: false, readonlylockdown: true, snapshotactions: true }, status: { errorcolors: true, trimunsupported: false }, storagepool: { activetab: 1, boot: true, bootlockdown: true, refreshall: false, root: true } } }, modal = { name, welcome: false }) {
+function FnConfigure(user = { cockpit: { manage: true }, disks: { base2: false }, loglevel: 1, samba: { manage: true, windowscompatibility: true }, updates: { check: true }, zfs: { filesystem: { cloneorigin: false, quotarestrict: true, readonlylockdown: true, snapshotactions: true }, status: { errorcolors: true, trimunsupported: false }, storagepool: { activetab: 1, boot: true, bootlockdown: true, refreshall: false, root: true } } }, modal = { name, welcome: false }) {
     let process = {
         command: ["/bin/sh", "-c", "echo '" + JSON.stringify(user, null, "  ").replace(/^\{\n/, `{\n  "#1": "COCKPIT ZFS MANAGER",\n  "#2": "WARNING: DO NOT EDIT, AUTO-GENERATED CONFIGURATION",\n`) + "' > /etc/cockpit/zfs/config.json"]
     };
@@ -489,12 +647,12 @@ function FnConfigure(user = { cockpit: { manage: true }, disks: { base2: false }
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function (data) {
-            FnDisplayNotification({ status: "success", title: "Configuration successfully updated", message: null }, { name: modal.name, id: null });
+            FnDisplayAlert({ status: "success", title: "Configuration successfully updated", description: null, breakword: false }, { name: modal.name, id: null, timeout: 4 });
 
             FnConsole.log[1]("Cockpit ZFS Manager, Configure: Success");
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Configuration could not be updated", message: null }, { name: modal.name, id: null });
+            FnDisplayAlert({ status: "danger", title: "Configuration could not be updated", description: null, breakword: false }, { name: modal.name, id: null, timeout: 4 });
 
             FnConsole.warn("Cockpit ZFS Manager, Configure: Failed, Message: " + (data ? data : message));
         })
@@ -655,6 +813,60 @@ function FnConfigurationLegacyRelocate(legacy = { path }) {
         });
 }
 
+function FnUpdatesCheck(display = { alert: true }) {
+    FnConsole.log[2]("Cockpit ZFS Manager, Updates, Check: In Progress");
+
+    $.ajax({ url: "https://api.github.com/repos/optimans/cockpit-zfs-manager/releases", dataType: "json", cache: false })
+        .done(function (data) {
+            if (data[0].name) {
+                if (FnUpdatesVersionCompare({ installed: zfsmanager.version, latest: data[0].name }) < 0) {
+                    setTimeout(function () {
+                        $("#alert-about-update").removeClass("hidden");
+                        $("#span-about-update-version").html(`<a href="` + data[0].html_url + `" target="_blank">` + data[0].name + ` ` + (data[0].prerelease === true ? `(Pre-release)` : `(Release)`) + `</a>`);
+
+                        if (display.alert) {
+                            FnDisplayAlert({ status: "info", title: "A new version of Cockpit ZFS Manager is now available", description: ` <a href="` + data[0].html_url + `" target="_blank">` + data[0].name + ` ` + (data[0].prerelease === true ? `(Pre-release)` : `(Release)`) + `</a>`, breakword: true }, { name: "update", id: null, timeout: 30 });
+                        }
+                    }, 500);
+                }
+
+                FnConsole.log[2]("Cockpit ZFS Manager, Updates, Check: Success");
+            } else {
+                FnConsole.warn("Cockpit ZFS Manager, Updates, Check: Failed, Message: Unable to retrieve release information.");
+            }
+        })
+        .fail(function (message) {
+            FnConsole.warn("Cockpit ZFS Manager, Updates, Check: Failed, Message: " + message);
+        });
+}
+
+function FnUpdatesVersionCompare(version = { installed, latest }) {
+    version.installed = version.installed.replace(/[^0-9.-]/g, "").replace(/\s+/g, "").replace(/-/g, ".").split(".");
+    version.latest = version.latest.replace(/[^0-9.-]/g, "").replace(/\s+/g, "").replace(/-/g, ".").split(".");
+
+    let min = Math.min(version.installed.length, version.latest.length);
+
+    for (let i = 0; i < min; ++i) {
+        version.installed[i] = parseInt(version.installed[i], 10);
+        version.latest[i] = parseInt(version.latest[i], 10);
+
+        if (version.installed[i] > version.latest[i]) {
+            return 1;
+        }
+        if (version.installed[i] < version.latest[i]) {
+            return -1;
+        }
+    }
+
+    return version.installed.length == (version.latest.length ? 0 : (version.installed.length < version.latest.length ? -1 : 1));
+}
+
+function FnVersionWarning() {
+    if (/alpha|beta|dev|internal|pre|rc/gi.test(zfsmanager.version)) {
+        FnDisplayAlert({ status: "warning", title: "Pre-release version of Cockpit ZFS Manager is installed", description: zfsmanager.version + ` is an unstable build and features may not work as intended`, breakword: true }, { name: "version-warning", id: null, timeout: 60 });
+    }
+}
+
 //#endregion
 
 //#region Cockpit
@@ -683,6 +895,10 @@ function FnCockpitElementsDisable() {
     //Disable sliders
     $("#validationwrapper-storagepools-create-refreservation .slider-pf .slider *").addClass("disabled");
     $("#slider-storagepools-create-refreservation").slider("disable");
+    $("[id^=validationwrapper-storagepool-filesystems-create-quota-] .slider-pf .slider *").addClass("disabled");
+    $("[id^=slider-storagepool-filesystems-create-quota-]").slider("disable");
+    $("[id^=validationwrapper-storagepool-filesystem-configure-quota-] .slider-pf .slider *").addClass("disabled");
+    $("[id^=slider-storagepool-filesystem-configure-quota-]").slider("disable");
     $("[id^=validationwrapper-storagepool-filesystem-configure-refreservation-] .slider-pf .slider *").addClass("disabled");
     $("[id^=slider-storagepool-filesystem-configure-refreservation-]").slider("disable");
 
@@ -784,7 +1000,7 @@ function FnCockpitPermissionsGet() {
 //#region ZFS
 
 function FnZfsVersionCompare(version = { installed, threshold }) {
-    version.installed = version.installed.replace(/\s+/g, "").replace(/-/g, ".").split(".");
+    version.installed = version.installed.replace(/[^0-9.-]/g, "").replace(/\s+/g, "").replace(/-/g, ".").split(".");
     version.threshold = version.threshold.replace(/\s+/g, "").replace(/-/g, ".").split(".");
 
     if (!version.installed[0]) {
@@ -813,7 +1029,8 @@ function FnZfsVersionGet() {
         command: ["/bin/cat", "/sys/module/zfs/version"]
     };
     let zfs = {
-        success: false
+        success: false,
+        threshold: "0.8"
     };
 
     FnConsole.log[2]("ZFS, Version, Get: In Progress");
@@ -827,8 +1044,8 @@ function FnZfsVersionGet() {
                 zfsmanager.zfs.version = data.replace(/\s+/g, "");
             }
 
-            if (!data || FnZfsVersionCompare({ installed: zfsmanager.zfs.version.replace(/[^0-9.]/g, ""), threshold: "0.8" }) < 0) {
-                FnConsole.error("ZFS, Version, Get: Failed, Message: Version " + (zfsmanager.zfs.version ? zfsmanager.zfs.version : "0") + " < 0.8");
+            if (!data || FnZfsVersionCompare({ installed: zfsmanager.zfs.version, threshold: zfs.threshold }) < 0) {
+                FnConsole.error("ZFS, Version, Get: Failed, Message: Version " + (zfsmanager.zfs.version ? zfsmanager.zfs.version : "0") + " < " + zfs.threshold);
             } else {
                 zfs.success = true;
 
@@ -844,7 +1061,7 @@ function FnZfsVersionGet() {
                     <div class="blank-slate-pf-icon">
                         <i class="fa fa-exclamation-circle"></i>
                     </div>
-                    <h1>This package requires ZFS version 0.8 or later</h1>
+                    <h1>This package requires ZFS version ` + zfs.threshold + ` or later</h1>
                     <p>If ZFS is installed, check the module is loaded into the kernel.</p>
                     <div class="blank-slate-pf-main-action">
                         <button id="btn-alerts-requirements-zfs-refresh" class="btn btn-primary btn-lg" tabIndex="-1">Refresh</button>
@@ -860,6 +1077,10 @@ function FnZfsVersionGet() {
                 }
             }
         });
+}
+
+function FnZfsVersionWarnings() {
+    zfsmanager.zfs.warnings.nvmevdev = (FnZfsVersionCompare({ installed: zfsmanager.zfs.version, threshold: "0.8.3" }) < 0 ? true : false); //GitHub Issue #9730
 }
 
 //#endregion
@@ -885,7 +1106,7 @@ function FnStoragePoolsGet() {
     $("[id^=modals-storagepool-]").remove();
     $("[id^=dynamics-storagepool-]").remove();
     $("#spinner-storagepools").removeClass("hidden");
-    
+
     FnConsole.log[2]("Storage Pools, Get: In Progress");
     FnConsole.log[3](FnConsoleCommand({ command: process.command }));
 
@@ -1323,7 +1544,7 @@ function FnStoragePoolsGetCommand(process = { data, message }) {
 
         //Register storage pool modals
         FnModalStoragePoolConfigure({ name: pool.name, id: pool.id, boot: pool.boot, guid: pool.guid, readonly: false, root: pool.root });
-        FnModalStoragePoolConfigureFeatures({ name: pool.name, id: pool.id, boot: pool.boot, readonly: false, version: pool.version });
+        FnModalStoragePoolConfigureFeatures({ name: pool.name, id: pool.id, boot: pool.boot, readonly: false });
         if (pool.actionsmenu.register.destroy) {
             FnModalStoragePoolDestroy({ name: pool.name, id: pool.id, altroot: pool.altroot });
         }
@@ -1337,10 +1558,41 @@ function FnStoragePoolsGetCommand(process = { data, message }) {
     FnCockpitElementsUpdate();
 }
 
-function FnStoragePoolsImportableGet(pools = { destroyed: false }) {
+function FnStoragePoolsImportableBlockDeviceGet(pools = { destroyed: false }) {
     let process = {
         command: ["/bin/sh", "-c", "/sbin/zpool import -d /dev" + (pools.destroyed ? " -D" : "") + " 2> /dev/null | /bin/grep -E 'pool:\| id:\|state:'  | tr '\\\n' ','"]
     };
+
+    FnConsole.log[2]("Storage Pools, Importable, Block Device, Get: In Progress");
+    FnConsole.log[3](FnConsoleCommand({ command: process.command }));
+
+    return cockpit.spawn(process.command, { err: "out", superuser: "require" })
+        .done(function () {
+            FnConsole.log[1]("Storage Pools, Importable, Block Device, Get: Success");
+        })
+        .fail(function (message, data) {
+            FnConsole.warn("Storage Pools, Importable, Block Device, Get: Failed, Message: " + (data ? data : message));
+        });
+}
+
+function FnStoragePoolsImportableDiskGet(pools = { destroyed: false }) {
+    let process = {
+        command: ["/bin/sh", "-c", "/sbin/zpool import -d /dev/disk/by-id" + (pools.destroyed ? " -D" : "") + " 2> /dev/null | /bin/grep -E 'pool:\| id:\|state:'  | tr '\\\n' ','"]
+    };
+
+    FnConsole.log[2]("Storage Pools, Importable, Disk / WWN, Get: In Progress");
+    FnConsole.log[3](FnConsoleCommand({ command: process.command }));
+
+    return cockpit.spawn(process.command, { err: "out", superuser: "require" })
+        .done(function () {
+            FnConsole.log[1]("Storage Pools, Importable, Disk / WWN, Get: Success");
+        })
+        .fail(function (message, data) {
+            FnConsole.warn("Storage Pools, Importable, Disk / WWN, Get: Failed, Message: " + (data ? data : message));
+        });
+}
+
+function FnStoragePoolsImportableGet(pools = { destroyed: false }) {
     let replacement = {
         regexp: [
             { pattern: /^(?: )+pool\:/gi, replacement: "pool\:" },
@@ -1353,97 +1605,157 @@ function FnStoragePoolsImportableGet(pools = { destroyed: false }) {
         ]
     };
 
+    pools.importable = {
+        blockdevice: [],
+        disk: [],
+        path: [],
+        vdev: []
+    };
+
     $("#listgroup-storagepools-import-storagepools").empty().append(`<li id="spinner-storagepools-import-storagepools" class="list-group-item"><div class="spinner"></div></li>`);
 
-    FnStoragePoolsImportableWwnGet({ destroyed: pools.destroyed })
-        .done(function (data) {
-            FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Storage Pools, Importable, WWN, Get:" }));
+    FnConsole.log[2]("Storage Pools, Importable, Get: In Progress");
 
-            pools.importablewwn = [];
+    FnStoragePoolsImportableDiskGet({ destroyed: pools.destroyed })
+        .done(function (data) {
+            FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Storage Pools, Importable, Disk / WWN, Get:" }));
 
             if (/no pools available to import/gi.test(data) == false) {
-                pools.importablewwn = replacement.regexp.reduce((d, r) => d.replace(r.pattern, r.replacement), data).split(/\n/g).filter(v => v);
+                pools.importable.disk = replacement.regexp.reduce((d, r) => d.replace(r.pattern, r.replacement), data).split(/\n/g).filter(v => v);
             }
 
-            FnConsole.log[2]("Storage Pools, Importable, Get: In Progress");
-            FnConsole.log[3](FnConsoleCommand({ command: process.command }));
-
-            return cockpit.spawn(process.command, { err: "out", superuser: "require" })
+            FnStoragePoolsImportableHardwarePathGet({ destroyed: pools.destroyed })
                 .done(function (_data) {
-                    FnConsole.log[4](FnConsoleVerbose({ data: _data, message: "Storage Pools, Importable, Get:" }));
-
-                    pools.importable = [];
+                    FnConsole.log[4](FnConsoleVerbose({ data: _data, message: "Storage Pools, Importable, Hardware Path, Get:" }));
 
                     if (/no pools available to import/gi.test(_data) == false) {
-                        pools.importable = replacement.regexp.reduce((d, r) => d.replace(r.pattern, r.replacement), _data).split(/\n/g).filter(v => v);
-
-                        pools.importable.sort().forEach((_value, _index) => {
-                            let pool = {
-                                healthstatus: "",
-                                properties: [],
-                                wwn: false
-                            };
-
-                            pool.properties = _value.split(/,/g).filter(v => v);
-                            pool.name = pool.properties[0].trim();
-                            pool.guid = pool.properties[1].trim();
-                            pool.health = pool.properties[2];
-
-                            pools.importablewwn.filter(v => { if (v.match(pool.name) && !pool.wwn) { pool.wwn = true } });
-
-                            if (/ONLINE/g.test(pool.health) == false) {
-                                pool.healthstatus = ` <span class="pficon pficon-warning-triangle-o list-view-pf-icon-sm"></span>`;
-
-                                $("#helpblock-storagepools-import-storagepools-warning").html("One or more storage pools are in an unhealthy state." + pool.healthstatus);
-                            }
-
-                            pool.output = `
-                                <li class="list-group-item hidden">
-                                    <label class="select-ct-pool-row">
-                                        <input name="checkbox-storagepools-import-storagepools" data-pool-import-guid="` + pool.guid + `" data-pool-import-health="` + pool.health + `" data-pool-import-name="` + pool.name + `" data-pool-import-wwn="` + pool.wwn + `" tabindex="` + (_index + 100) + `" type="checkbox">
-                                        <span>
-                                            ` + pool.name + `
-                                            <span class="select-ct-pool-row-id">` + pool.guid + `</span>
-                                        </span>
-                                        <span>` + pool.health.replace(/\(DESTROYED\)/i, "") + ` ` + pool.healthstatus + `</span>
-                                    </label>
-                                </li>
-                            `;
-
-                            $("#listgroup-storagepools-import-storagepools").append(pool.output);
-                        });
+                        pools.importable.path = replacement.regexp.reduce((d, r) => d.replace(r.pattern, r.replacement), _data).split(/\n/g).filter(v => v);
                     }
 
-                    setTimeout(function () {
-                        $("#spinner-storagepools-import-storagepools").remove();
-                        $("#listgroup-storagepools-import-storagepools > li").removeClass("hidden");
-                        if ($("#helpblock-storagepools-import-storagepools-warning").text()) {
-                            $("#helpblock-storagepools-import-storagepools-warning").removeClass("hidden");
-                        }
+                    FnStoragePoolsImportableVirtualDeviceMappingGet({ destroyed: pools.destroyed })
+                        .done(function (__data) {
+                            FnConsole.log[4](FnConsoleVerbose({ data: __data, message: "Storage Pools, Importable, Virtual Device Mapping, Get:" }));
 
-                        if ($("#listgroup-storagepools-import-storagepools > li").length == 0) {
-                            pools.output = `
-                                <li class="list-group-item">
-                                    <label>
-                                        No ` + (pools.destroyed ? "destroyed" : "importable") + ` storage pools found.
-                                    </label>
-                                </li>
-                            `;
+                            if (/no pools available to import/gi.test(__data) == false) {
+                                pools.importable.vdev = replacement.regexp.reduce((d, r) => d.replace(r.pattern, r.replacement), __data).split(/\n/g).filter(v => v);
+                            }
 
-                            $("#listgroup-storagepools-import-storagepools").append(pools.output);
-                        }
-                    }, 200);
+                            FnStoragePoolsImportableBlockDeviceGet({ destroyed: pools.destroyed })
+                                .done(function (___data) {
+                                    FnConsole.log[4](FnConsoleVerbose({ data: ___data, message: "Storage Pools, Importable, Block Device, Get:" }));
 
-                    FnConsole.log[1]("Storage Pools, Importable, Get: Success");
+                                    if (/no pools available to import/gi.test(___data) == false) {
+                                        pools.importable.blockdevice = replacement.regexp.reduce((d, r) => d.replace(r.pattern, r.replacement), ___data).split(/\n/g).filter(v => v);
+
+                                        pools.importable.blockdevice.sort().forEach((_value, _index) => {
+                                            let pool = {
+                                                healthstatus: "",
+                                                properties: [],
+                                                id: {
+                                                    blockdevice: true,
+                                                    disk: false,
+                                                    path: false,
+                                                    vdev: false,
+                                                },
+                                                idtext: ["Block Device"]
+                                            };
+
+                                            pool.properties = _value.split(/,/g).filter(v => v);
+                                            pool.name = pool.properties[0].trim();
+                                            pool.guid = pool.properties[1].trim();
+                                            pool.health = pool.properties[2].trim();
+
+                                            pools.importable.disk.filter(v => { if (v.match(pool.name) && !pool.id.disk) { pool.id.disk = true; pool.idtext.push("Disk / WWN"); } });
+                                            pools.importable.path.filter(v => { if (v.match(pool.name) && !pool.id.path) { pool.id.path = true; pool.idtext.push("Hardware Path"); } });
+                                            pools.importable.vdev.filter(v => { if (v.match(pool.name) && !pool.id.vdev) { pool.id.vdev = true; pool.idtext.push("Virtual Device Mapping"); } });
+
+
+                                            if (/ONLINE/g.test(pool.health) == false) {
+                                                pool.healthstatus = ` <span class="pficon pficon-warning-triangle-o list-view-pf-icon-sm"></span>`;
+
+                                                $("#helpblock-storagepools-import-storagepools-warning").html("One or more storage pools are in an unhealthy state." + pool.healthstatus);
+                                            }
+
+                                            pool.output = `
+                                                <li class="list-group-item hidden">
+                                                    <label class="select-ct-pool-row">
+                                                        <input name="checkbox-storagepools-import-storagepools" data-pool-import-guid="` + pool.guid + `" data-pool-import-health="` + pool.health + `" data-pool-import-id-blockdevice="` + pool.id.blockdevice + `" data-pool-import-id-disk="` + pool.id.disk + `" data-pool-import-id-path="` + pool.id.path + `" data-pool-import-id-vdev="` + pool.id.vdev + `" data-pool-import-name="` + pool.name + `" tabindex="` + (_index + 100) + `" type="checkbox">
+                                                        <span>
+                                                            ` + pool.name + `
+                                                            <span class="select-ct-pool-row-guid">GUID: ` + pool.guid + `</span>
+                                                            <span class="select-ct-pool-row-identifier">Disk Identifiers: ` + pool.idtext.join(", ") + `</span>
+                                                        </span>
+                                                        <span class="select-ct-pool-row-health">` + pool.health.replace(/\(DESTROYED\)/i, "") + ` ` + pool.healthstatus + `</span>
+                                                    </label>
+                                                </li>
+                                            `;
+
+                                            $("#listgroup-storagepools-import-storagepools").append(pool.output);
+                                        });
+                                    }
+
+                                    setTimeout(function () {
+                                        $("#spinner-storagepools-import-storagepools").remove();
+                                        $("#listgroup-storagepools-import-storagepools > li").removeClass("hidden");
+                                        if ($("#helpblock-storagepools-import-storagepools-warning").text()) {
+                                            $("#helpblock-storagepools-import-storagepools-warning").removeClass("hidden");
+                                        }
+
+                                        if ($("#listgroup-storagepools-import-storagepools > li").length == 0) {
+                                            pools.output = `
+                                                <li class="list-group-item">
+                                                    <label>
+                                                        No ` + (pools.destroyed ? "destroyed" : "importable") + ` storage pools found.
+                                                    </label>
+                                                </li>
+                                            `;
+
+                                            $("#listgroup-storagepools-import-storagepools").append(pools.output);
+                                        }
+                                    }, 200);
+
+                                    FnConsole.log[1]("Storage Pools, Importable, Get: Success");
+                                })
+                                .fail(function (___message, ___data) {
+                                    if (/no pools available to import/gi.test(___data) == false) {
+                                        FnConsole.warn("Storage Pools, Importable, Get: Failed, Message: " + (___data ? ___data : ___message));
+                                    }
+
+                                    FnStoragePoolsImportableGetFail({ destroyed: pools.destroyed });
+                                });
+                        })
+                        .fail(function (__message, __data) {
+                            if (/no pools available to import/gi.test(__data) == false) {
+                                FnConsole.warn("Storage Pools, Importable, Get: Failed, Message: " + (__data ? __data : __message));
+                            }
+
+                            FnStoragePoolsImportableGetFail({ destroyed: pools.destroyed });
+                        });
+                })
+                .fail(function (_message, _data) {
+                    if (/no pools available to import/gi.test(_data) == false) {
+                        FnConsole.warn("Storage Pools, Importable, Get: Failed, Message: " + (_data ? _data : _message));
+                    }
+
+                    FnStoragePoolsImportableGetFail({ destroyed: pools.destroyed });
                 });
         })
         .fail(function (message, data) {
-            setTimeout(function () {
-                $("#spinner-storagepools-import-storagepools").remove();
-                $("#listgroup-storagepools-import-storagepools > li").removeClass("hidden");
+            if (/no pools available to import/gi.test(data) == false) {
+                FnConsole.warn("Storage Pools, Importable, Get: Failed, Message: " + (data ? data : message));
+            }
 
-                if ($("#listgroup-storagepools-import-storagepools > li").length == 0) {
-                    pools.output = `
+            FnStoragePoolsImportableGetFail({ destroyed: pools.destroyed });
+        });
+}
+
+function FnStoragePoolsImportableGetFail(pools = { destroyed: false }) {
+    setTimeout(function () {
+        $("#spinner-storagepools-import-storagepools").remove();
+        $("#listgroup-storagepools-import-storagepools > li").removeClass("hidden");
+
+        if ($("#listgroup-storagepools-import-storagepools > li").length == 0) {
+            pools.output = `
                         <li class="list-group-item">
                             <label>
                                 No ` + (pools.destroyed ? "destroyed" : "importable") + ` storage pools found.
@@ -1451,30 +1763,42 @@ function FnStoragePoolsImportableGet(pools = { destroyed: false }) {
                         </li>
                     `;
 
-                    $("#listgroup-storagepools-import-storagepools").append(pools.output);
-                }
-            }, 200);
-
-            if (/no pools available to import/gi.test(data) == false) {
-                FnConsole.warn("Storage Pools, Importable, Get: Failed, Message: " + (data ? data : message));
-            }
-        });
+            $("#listgroup-storagepools-import-storagepools").append(pools.output);
+        }
+    }, 200);
 }
 
-function FnStoragePoolsImportableWwnGet(pools = { destroyed: false }) {
+function FnStoragePoolsImportableHardwarePathGet(pools = { destroyed: false }) {
     let process = {
-        command: ["/bin/sh", "-c", "/sbin/zpool import -d /dev/disk/by-id" + (pools.destroyed ? " -D" : "") + " 2> /dev/null | /bin/grep -E 'pool:\| id:\|state:'  | tr '\\\n' ','"]
+        command: ["/bin/sh", "-c", "/sbin/zpool import -d /dev/disk/by-path" + (pools.destroyed ? " -D" : "") + " 2> /dev/null | /bin/grep -E 'pool:\| id:\|state:'  | tr '\\\n' ','"]
     };
 
-    FnConsole.log[2]("Storage Pools, Importable, WWN, Get: In Progress");
+    FnConsole.log[2]("Storage Pools, Importable, Hardware Path, Get: In Progress");
     FnConsole.log[3](FnConsoleCommand({ command: process.command }));
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnConsole.log[1]("Storage Pools, Importable, WWN, Get: Success");
+            FnConsole.log[1]("Storage Pools, Importable, Hardware Path, Get: Success");
         })
         .fail(function (message, data) {
-            FnConsole.warn("Storage Pools, Importable, WWN, Get: Failed, Message: " + (data ? data : message));
+            FnConsole.warn("Storage Pools, Importable, Hardware Path, Get: Failed, Message: " + (data ? data : message));
+        });
+}
+
+function FnStoragePoolsImportableVirtualDeviceMappingGet(pools = { destroyed: false }) {
+    let process = {
+        command: ["/bin/sh", "-c", "/sbin/zpool import -d /dev/disk/by-vdev" + (pools.destroyed ? " -D" : "") + " 2> /dev/null | /bin/grep -E 'pool:\| id:\|state:'  | tr '\\\n' ','"]
+    };
+
+    FnConsole.log[2]("Storage Pools, Importable, Virtual Device Mapping, Get: In Progress");
+    FnConsole.log[3](FnConsoleCommand({ command: process.command }));
+
+    return cockpit.spawn(process.command, { err: "out", superuser: "require" })
+        .done(function () {
+            FnConsole.log[1]("Storage Pools, Importable, Virtual Device Mapping, Get: Success");
+        })
+        .fail(function (message, data) {
+            FnConsole.warn("Storage Pools, Importable, Virtual Device Mapping, Get: Failed, Message: " + (data ? data : message));
         });
 }
 
@@ -1573,12 +1897,12 @@ function FnStoragePoolClear(pool = { name, id }, modal = { name, id }) {
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Storage Pool errors successfully cleared", message: pool.name }, { name: "storagepool-clear", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Storage Pool errors successfully cleared", description: pool.name, breakword: false }, { name: "storagepool-clear", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Clear Errors: Success, Pool: " + pool.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Storage Pool errors could not be cleared", message: pool.name }, { name: "storagepool-clear", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Storage Pool errors could not be cleared", description: pool.name, breakword: false }, { name: "storagepool-clear", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Clear Errors: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
         })
@@ -2362,7 +2686,7 @@ function FnStoragePoolConfigureCommand(pool = { name, id, properties: { new: [] 
                     .done(function () {
                         if (_index == (pool.properties.new.length - 1)) {
                             if (pool.properties.errorcount == 0) {
-                                FnDisplayNotification({ status: "success", title: "Storge Pool successfully configured", message: pool.name }, { name: "storagepool-configure", id: pool.id });
+                                FnDisplayAlert({ status: "success", title: "Storge Pool successfully configured", description: pool.name, breakword: false }, { name: "storagepool-configure", id: pool.id, timeout: 4 });
 
                                 FnConsole.log[1]("Storage Pools, Configure: Success, Pool: " + pool.name);
                             } else {
@@ -2395,7 +2719,7 @@ function FnStoragePoolConfigureCommand(pool = { name, id, properties: { new: [] 
 }
 
 function FnStoragePoolConfigureFail(pool = { name, id }) {
-    FnDisplayNotification({ status: "danger", title: "Storge Pool could not be configured", message: pool.name }, { name: "storagepool-configure", id: pool.id });
+    FnDisplayAlert({ status: "danger", title: "Storge Pool could not be configured", description: pool.name, breakword: false }, { name: "storagepool-configure", id: pool.id, timeout: 4 });
 
     FnConsole.warn("Storage Pools, Configure: Failed, Pool: " + pool.name);
 }
@@ -2514,7 +2838,7 @@ function FnStoragePoolConfigureFeaturesCommand(pool = { name, id, features: { ne
                     .done(function () {
                         if (_index == (pool.features.new.length - 1)) {
                             if (pool.features.errorcount == 0) {
-                                FnDisplayNotification({ status: "success", title: "Storge Pool features successfully configured", message: pool.name }, { name: "storagepool-configure-features", id: pool.id });
+                                FnDisplayAlert({ status: "success", title: "Storge Pool features successfully configured", description: pool.name, breakword: false }, { name: "storagepool-configure-features", id: pool.id, timeout: 4 });
 
                                 FnConsole.log[1]("Storage Pools, Configure, Features: Success, Pool: " + pool.name);
                             } else {
@@ -2547,7 +2871,7 @@ function FnStoragePoolConfigureFeaturesCommand(pool = { name, id, features: { ne
 }
 
 function FnStoragePoolConfigureFeaturesFail(pool = { name, id }) {
-    FnDisplayNotification({ status: "danger", title: "Storge Pool features could not be configured", message: pool.name }, { name: "storagepool-configure-features", id: pool.id });
+    FnDisplayAlert({ status: "danger", title: "Storge Pool features could not be configured", description: pool.name, breakword: false }, { name: "storagepool-configure-features", id: pool.id, timeout: 4 });
 
     FnConsole.warn("Storage Pools, Configure, Features: Failed, Pool: " + pool.name);
 }
@@ -2592,7 +2916,7 @@ function FnStoragePoolCreate(pool = { name, ashift, autoexpand, autoreplace, aut
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Storage Pool successfully created", message: pool.name }, { name: "storagepool-create", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Storage Pool successfully created", description: pool.name, breakword: false }, { name: "storagepool-create", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Create: Success, Pool: " + pool.name);
 
@@ -2624,7 +2948,7 @@ function FnStoragePoolCreate(pool = { name, ashift, autoexpand, autoreplace, aut
                 $("#validationwrapper-storagepools-create-disks").addClass("has-error");
                 $("#helpblock-storagepools-create-disks").addClass("has-error").removeClass("hidden").text("Disks are of different sizes. Forcefully create storage pool to override.");
             } else {
-                FnDisplayNotification({ status: "danger", title: "Storage Pool could not be created", message: pool.name }, { name: "storagepool-create", id: pool.id });
+                FnDisplayAlert({ status: "danger", title: "Storage Pool could not be created", description: pool.name, breakword: false }, { name: "storagepool-create", id: pool.id, timeout: 4 });
             }
 
             FnConsole.warn("Storage Pools, Create: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
@@ -2651,36 +2975,81 @@ function FnStoragePoolDestroy(pool = { name, id, altroot: false, force: false, l
         attached: []
     };
 
+    pool.attached = [];
+    pool.attachedconfig = [];
+
     if (pool.labelclear) {
-        FnDisksStoragePoolsAttachedGet({ name: pool.name, id: pool.id }, { wwn: false })
+        FnDisksStoragePoolsAttachedGet({ name: pool.name, id: pool.id }, { id: { blockdevice: true } })
             .done(function (data) {
                 FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Disks, Storage Pools, Attached, Get:" }));
 
-                pool.attached = data.split(/\n/g).filter(v => v && (/\/dev\/nvme|\/dev\/s|\/dev\/disk\/by-id\//gi.test(v)));
+                pool.attached = data.replace(/\n\t+/g, "[TAB1]").split(/\n/g).filter(v => v);
 
                 pool.attached.forEach((_value, _index) => {
-                    _value = _value.replace(/\t/g, "").replace(/^ +/g, "");
-                    _value = _value.substring(0, _value.indexOf(" "));
+                    if (/\[TAB1\]NAME/g.test(_value)) { //Config header row
+                        _value = _value.split("upath").slice(1).join("."); //Remove config header row (and any previous text if exists)
 
-                    if (/\/dev\/nvme/gi.test(_value)) {
-                        _value = _value.substring(0, _value.length - 2).replace(/\/dev\//gi, ""); //Remove partition number from device
-                    } else if (/\/dev\/s/gi.test(_value)) {
-                        _value = _value.substring(0, _value.length - 1).replace(/\/dev\//gi, ""); //Remove partition number from device
-                    } else if (/\/dev\/disk\/by-id\//gi.test(_value)) {
-                        _value = _value.substring(0, _value.toLowerCase().indexOf("-part")).replace(/\/dev\/disk\/by-id\//gi, ""); //Remove partition number from device
-                    }
-
-                    if (!$.isNumeric(_value)) { //Do not include Disks that are no longer available
-                        disks.attached.push(_value);
+                        if (new RegExp("^\\[TAB1\\]" + pool.name).test(_value)) { //Confirm config rows
+                            _value.split("[TAB1]").filter(v => v && pool.attachedconfig.push(v));
+                        }
                     }
                 });
+
+                pool.attachedconfig.forEach((_value, _index) => {
+                    let config = {
+                        disk: {
+                            upath: ""
+                        },
+                        tier: {
+                            level: (_value.match(/^\s*/g)[0].length / 2)
+                        }
+                    };
+
+                    _value = _value.replace(/ +/g, "\u22C5").replace(/^\u22C5/, "").split("\u22C5").filter(v => v);
+
+                    if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[5])) { //upath
+                        config.disk.upath = _value[5];
+                    } else if (!$.isNumeric(_value[0]) && _value[5] != "was") { //upath appears after error messages and before trim messages
+                        for (let i = 5; i < _value.length; i++) {
+                            if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[i])) {
+                                config.disk.upath = _value[i];
+                            }
+                        }
+                    }
+
+                    if (config.tier.level > 0) {
+                        if (/^\/dev\/nvme|^\/dev\/sd/gi.test(config.disk.upath)) { //Block Device via upath
+                            disks.attached.push(config.disk.upath.replace(/^\/dev\//gi, ""));
+                        } else if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[0])) { //Block Device
+                            if (/^\/dev\/nvme\d+n\d+p\d+$/gi.test(_value[0])) {
+                                disks.attached.push(_value[0].replace(/^\/dev\//gi, "").replace(/p\d+$/, ""));
+                            } else if (/^\/dev\/sd.*\d+$/gi.test(_value[0])) {
+                                disks.attached.push(_value[0].replace(/^\/dev\//gi, "").replace(/\d+$/, ""));
+                            } else {
+                                disks.attached.push(_value[0]);
+                            }
+                        } else if (/^nvme-nvme/gi.test(_value[0]) || /^wwn-/gi.test(_value[0])) { //WWN
+                            if (/^nvme-nvme.*-part\d+$/gi.test(_value[0])) {
+                                disks.attached.push(_value[0].replace(/-part\d+$/, ""));
+                            } else if (/^wwn-.*-part\d+$/gi.test(_value[0])) {
+                                disks.attached.push(_value[0].replace(/-part\d+$/, ""));
+                            } else {
+                                disks.attached.push(_value[0]);
+                            }
+                        }
+                    }
+                });
+
+                disks.attached.sort();
             });
     }
 
     if (samba.restart) {
         FnSambaStop()
-            .done(function () {
+            .finally(function () {
                 if (zfsmanager.configuration.samba.manage) {
+                    $("#spinner-storagepool-destroy-" + pool.id + " span").text("Retrieving Samba shares...");
+
                     FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: null, clones: [] })
                         .done(function (data) {
                             FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Samba, Shares, Get:" }));
@@ -2744,6 +3113,10 @@ function FnStoragePoolDestroy(pool = { name, id, altroot: false, force: false, l
                                         FnSambaStart();
                                     });
                             }
+                        })
+                        .fail(function (message, data) {
+                            FnStoragePoolDestroyFail({ name: pool.name, id: pool.id }, { data: data, message: message });
+                            FnSambaStart();
                         });
                 } else {
                     FnStoragePoolDestroyCommand({ name: pool.name, id: pool.id, force: pool.force })
@@ -2774,6 +3147,8 @@ function FnStoragePoolDestroy(pool = { name, id, altroot: false, force: false, l
             });
     } else {
         if (zfsmanager.configuration.samba.manage) {
+            $("#spinner-storagepool-destroy-" + pool.id + " span").text("Retrieving Samba shares...");
+
             FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: null, clones: [] })
                 .done(function (data) {
                     FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Samba, Shares, Get:" }));
@@ -2834,6 +3209,9 @@ function FnStoragePoolDestroy(pool = { name, id, altroot: false, force: false, l
                                 }
                             });
                     }
+                })
+                .fail(function (message, data) {
+                    FnStoragePoolDestroyFail({ name: pool.name, id: pool.id }, { data: data, message: message });
                 });
         } else {
             FnStoragePoolDestroyCommand({ name: pool.name, id: pool.id, force: pool.force })
@@ -2875,21 +3253,25 @@ function FnStoragePoolDestroyCommand(pool = { name, id, force: false }) {
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Storage Pool successfully destroyed", message: pool.name }, { name: "storagepool-destroy", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Storage Pool successfully destroyed", description: pool.name, breakword: false }, { name: "storagepool-destroy", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Destroy: Success, Pool: " + pool.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Storage Pool could not be destroyed", message: pool.name }, { name: "storagepool-destroy", id: pool.id });
-
-            FnConsole.warn("Storage Pools, Destroy: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
-
-            $("#modal-storagepool-destroy-" + pool.id).modal("hide");
-
-            setTimeout(function () {
-                FnStoragePoolsGet();
-            }, 200);
+            FnStoragePoolDestroyFail({ name: pool.name, id: pool.id }, { data: data, message: message });
         });
+}
+
+function FnStoragePoolDestroyFail(pool = { name, id }, process = { data, message }) {
+    FnDisplayAlert({ status: "danger", title: "Storage Pool could not be destroyed", description: pool.name, breakword: false }, { name: "storagepool-destroy", id: pool.id, timeout: 4 });
+
+    FnConsole.warn("Storage Pools, Destroy: Failed, Pool: " + pool.name + ", Message: " + (process.data ? process.data : process.message));
+
+    $("#modal-storagepool-destroy-" + pool.id).modal("hide");
+
+    setTimeout(function () {
+        FnStoragePoolsGet();
+    }, 200);
 }
 
 function FnStoragePoolDestroyLabelClear(pool = { name, id }, disks = { id: [] }) {
@@ -2916,11 +3298,11 @@ function FnStoragePoolDestroyLabelClear(pool = { name, id }, disks = { id: [] })
                     if (_index == (disks.id.length - 1)) {
                         setTimeout(function () {
                             if (disks.clear.error == 0) {
-                                FnDisplayNotification({ status: "success", title: "Storage Pool disk labels successfully cleared", message: pool.name }, { name: "storagepool-destroy-labelclear", id: pool.id });
+                                FnDisplayAlert({ status: "success", title: "Storage Pool disk labels successfully cleared", description: pool.name, breakword: false }, { name: "storagepool-destroy-labelclear", id: pool.id, timeout: 4 });
 
                                 FnConsole.log[1]("Storage Pools, Disk Labels, Clear: Success");
                             } else {
-                                FnDisplayNotification({ status: "danger", title: "Storage Pool disk labels could not be cleared", message: pool.name }, { name: "storagepool-destroy-labelclear", id: pool.id });
+                                FnDisplayAlert({ status: "danger", title: "Storage Pool disk labels could not be cleared", description: pool.name, breakword: false }, { name: "storagepool-destroy-labelclear", id: pool.id, timeout: 4 });
 
                                 FnConsole.warn("Storage Pools, Disk Labels, Clear: Failed");
                             }
@@ -2940,41 +3322,53 @@ function FnStoragePoolDestroyLabelClear(pool = { name, id }, disks = { id: [] })
     return process.promise.promise();
 }
 
-function FnStoragePoolDiskAttach(pool = { name, id, force: false }, virtualdevice = { id, disk: true }, disk = { idnew: [], wwn: true }, modal = { name, id }) {
+function FnStoragePoolDiskAttach(pool = { name, id, force: false }, virtualdevice = { id, disk: true }, disk = { idnew: [] }, modal = { name, id }) {
+    virtualdevice.mirror = {
+        start: null,
+        end: null
+    };
 
     $("#spinner-" + modal.name + "-" + modal.id + " span").text("Attaching disk...");
 
     if (!virtualdevice.disk && /^mirror-/.test(virtualdevice.id)) {
         disk.id = "";
 
-        FnDisksStoragePoolsAttachedGet({ name: pool.name, id: pool.id }, { wwn: true })
+        FnDisksStoragePoolsAttachedGet({ name: pool.name, id: pool.id }, { id: { blockdevice: false } })
             .done(function (data) {
                 FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Disks, Storage Pools, Attached, Get:" }));
 
-                pool.attached = data.split(/\n/g).filter(v => v && (/  mirror-/g.test(v) || /\/dev\/nvme|\/dev\/s|\/dev\/disk\/by-id\//gi.test(v))); //Mirror or Disk virtual devices only
+                pool.attached = data.replace(/\n\t+/g, "[TAB1]").split(/\n/g).filter(v => v);
+                pool.attachedconfig = [];
 
-                virtualdevice.mirror = {
-                    start: null,
-                    end: null
-                };
+                pool.attached.forEach((_value, _index) => {
+                    if (/\[TAB1\]NAME/g.test(_value)) { //Config header row
+                        _value = _value.split("upath").slice(1).join("."); //Remove config header row (and any previous text if exists)
 
-                pool.attached.forEach((_value, _index) => { //Find disks in Mirror virtual device and get hierarchy information
-                    _value = _value.replace(/\t/g, "");
+                        if (new RegExp("^\\[TAB1\\]" + pool.name).test(_value)) { //Confirm config rows
+                            _value.split("[TAB1]").filter(v => v && pool.attachedconfig.push(v));
+                        }
+                    }
+                });
 
-                    let tier = {
-                        level: (_value.match(/^\s*/g)[0].length / 2)
+                pool.attachedconfig.forEach((_value, _index) => { //Find disks in Mirror virtual device and get hierarchy information
+                    let config = {
+                        tier: {
+                            level: (_value.match(/^\s*/g)[0].length / 2)
+                        }
                     };
+
+                    _value = _value.replace(/ +/g, "\u22C5").replace(/^\u22C5/, "").split("\u22C5").filter(v => v);
 
                     virtualdevice.mirror.regexp = new RegExp(virtualdevice.id, "g");
 
-                    if (tier.level == 1 && virtualdevice.mirror.regexp.test(_value)) {
+                    if (config.tier.level == 1 && virtualdevice.mirror.regexp.test(_value[0])) {
                         if (!virtualdevice.mirror.start) {
                             virtualdevice.mirror.start = _index;
                         }
                     }
 
                     if (virtualdevice.mirror.start && _index > virtualdevice.mirror.start) {
-                        if (tier.level == 1) {
+                        if (config.tier.level == 1) {
                             if (!virtualdevice.mirror.end) {
                                 virtualdevice.mirror.end = _index;
                             }
@@ -2982,33 +3376,57 @@ function FnStoragePoolDiskAttach(pool = { name, id, force: false }, virtualdevic
                     }
                 });
 
-                pool.attached.forEach((_value, _index) => { //Find disk in Mirror virtual device with health state online
-                    _value = _value.replace(/\t/g, "");
+                if (!virtualdevice.mirror.end) {
+                    virtualdevice.mirror.end = pool.attachedconfig.length;
+                }
 
-                    let tier = {
-                        level: (_value.match(/^\s*/g)[0].length / 2)
+                pool.attachedconfig.forEach((_value, _index) => { //Find first healthy disk in the mirror virtual device
+                    let config = {
+                        disk: {
+                            upath: ""
+                        },
+                        tier: {
+                            level: (_value.match(/^\s*/g)[0].length / 2)
+                        }
                     };
 
-                    if (_index > virtualdevice.mirror.start && _index < (!virtualdevice.mirror.end ? pool.attached.length : virtualdevice.mirror.end) && tier.level == 2 && /ONLINE/g.test(_value)) {
-                        _value = _value.replace(/^ +/g, "");
-                        _value = _value.substring(0, _value.indexOf(" "));
+                    _value = _value.replace(/ +/g, "\u22C5").replace(/^\u22C5/, "").split("\u22C5").filter(v => v);
 
-                        if (/\/dev\/nvme/gi.test(_value)) {
-                            _value = _value.substring(0, _value.length - 2).replace(/\/dev\//gi, ""); //Remove partition number from device
-                        } else if (/\/dev\/s/gi.test(_value)) {
-                            _value = _value.substring(0, _value.length - 1).replace(/\/dev\//gi, ""); //Remove partition number from device
-                        } else if (/\/dev\/disk\/by-id\//gi.test(_value)) {
-                            _value = _value.substring(0, _value.toLowerCase().indexOf("-part")).replace(/\/dev\/disk\/by-id\//gi, ""); //Remove partition number from device
+                    if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[5])) { //upath
+                        config.disk.upath = _value[5];
+                    } else if (!$.isNumeric(_value[0]) && _value[5] != "was") { //upath appears after error messages and before trim messages
+                        for (let i = 5; i < _value.length; i++) {
+                            if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[i])) {
+                                config.disk.upath = _value[i];
+                            }
                         }
+                    }
 
-                        if (!disk.id) {
-                            disk.id = _value;
+                    if (config.tier.level == 2 && _index > virtualdevice.mirror.start && _index < virtualdevice.mirror.end && _value[1] == "ONLINE") {
+                        if (/^\/dev\/nvme|^\/dev\/sd/gi.test(config.disk.upath) || /^\/dev\/nvme|^\/dev\/sd/gi.test(_value[0])) { //Block Device
+                            if (/^\/dev\/nvme\d+n\d+p\d+$/gi.test(_value[0])) {
+                                if (!disk.id) {
+                                    disk.id = _value[0].replace(/p\d+$/, "");
+                                }
+                            } else if (/^\/dev\/sd.*\d+$/gi.test(_value[0])) {
+                                if (!disk.id) {
+                                    disk.id = _value[0].replace(/\d+$/, "");
+                                }
+                            } else {
+                                if (!disk.id) {
+                                    disk.id = _value[0].replace(/-part\d+$/, "");
+                                }
+                            }
+                        } else if (/^nvme-nvme/gi.test(_value[0]) || /^wwn-/gi.test(_value[0])) { //WWN
+                            if (!disk.id) {
+                                disk.id = _value[0].replace(/-part\d+$/, "");
+                            }
                         }
                     }
                 });
 
                 if (!disk.id || /^mirror-/g.test(disk.id)) {
-                    FnStoragePoolDiskAttachFail({ name: pool.name, id: pool.id }, { id: virtualdevice.id, disk: virtualdevice.disk }, { idnew: disk.idnew }, { name: modal.name, id: modal.id }, { data: null, message: "There are no healthy disks to attach to" });
+                    FnStoragePoolDiskAttachFail({ name: pool.name, id: pool.id }, { id: virtualdevice.id, disk: virtualdevice.disk }, { idnew: disk.idnew }, { name: modal.name, id: modal.id }, { data: null, message: "There are no healthy disks to attach to." });
                 } else {
                     FnStoragePoolDiskAttachCommand({ name: pool.name, id: pool.id, force: pool.force }, { id: virtualdevice.id, disk: virtualdevice.disk }, { id: disk.id, idnew: disk.idnew }, { name: modal.name, id: modal.id });
                 }
@@ -3035,12 +3453,12 @@ function FnStoragePoolDiskAttachCommand(pool = { name, id, force: false }, virtu
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Disk attached successfully to Storage Pool", message: pool.name }, { name: "storagepool-disk-attach", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Disk attached successfully to Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-disk-attach", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Disk, Attach: Success, Pool: " + pool.name + ", " + (!virtualdevice.disk ? "Virtual Device: " + virtualdevice.id + ", " : "") + "Disk: " + disk.idnew);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Disk could not be attached to Storage Pool", message: pool.name }, { name: "storagepool-disk-attach", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Disk could not be attached to Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-disk-attach", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Disk, Attach: Failed, Pool: " + pool.name + ", " + (!virtualdevice.disk ? "Virtual Device: " + virtualdevice.id + ", " : "") + "Disk: " + disk.idnew + ", Message: " + (data ? data : message));
         })
@@ -3054,7 +3472,7 @@ function FnStoragePoolDiskAttachCommand(pool = { name, id, force: false }, virtu
 }
 
 function FnStoragePoolDiskAttachFail(pool = { name, id }, virtualdevice = { id, disk: true }, disk = { idnew }, modal = { name, id }, process = { data, message }) {
-    FnDisplayNotification({ status: "danger", title: "Disk could not be attached to Storage Pool", message: pool.name }, { name: "storagepool-disk-attach", id: pool.id });
+    FnDisplayAlert({ status: "danger", title: "Disk could not be attached to Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-disk-attach", id: pool.id, timeout: 4 });
 
     FnConsole.warn("Storage Pools, Disk, Attach: Failed, Pool: " + pool.name + ", " + (!virtualdevice.disk ? "Virtual Device: " + virtualdevice.id + ", " : "") + "Disk: " + disk.idnew + ", Message: " + (process.data ? process.data : process.message));
 
@@ -3079,12 +3497,12 @@ function FnStoragePoolDiskClear(pool = { name, id }, disk = { id }, modal = { na
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Disk errors successfully cleared", message: disk.id }, { name: "storagepool-disk-clear", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Disk errors successfully cleared", description: disk.id, breakword: false }, { name: "storagepool-disk-clear", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Disk, Clear Errors: Success, Pool: " + pool.name + ", Disk: " + disk.id);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Disk errors could not be cleared", message: disk.id }, { name: "storagepool-disk-clear", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Disk errors could not be cleared", description: disk.id, breakword: false }, { name: "storagepool-disk-clear", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Disk, Clear Errors: Failed, Pool: " + pool.name + ", Disk: " + disk.id + ", Message: " + (data ? data : message));
         })
@@ -3111,7 +3529,7 @@ function FnStoragePoolDiskDetach(pool = { name, id }, disk = { id, labelclear: f
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Disk detached successfully from Storage Pool", message: pool.name }, { name: "storagepool-disk-detach", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Disk detached successfully from Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-disk-detach", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Disk, Detach: Success, Pool: " + pool.name + ", Disk: " + disk.id);
 
@@ -3133,7 +3551,7 @@ function FnStoragePoolDiskDetach(pool = { name, id }, disk = { id, labelclear: f
             }
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Disk could not be detached from Storage Pool", message: pool.name }, { name: "storagepool-disk-detach", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Disk could not be detached from Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-disk-detach", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Disk, Detach: Failed, Pool: " + pool.name + ", Disk: " + disk.id + ", Message: " + (data ? data : message));
         })
@@ -3163,7 +3581,7 @@ function FnStoragePoolDiskLabelClear(pool = { name, id }, disk = { id, inactive:
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
             if (!display.silent) {
-                FnDisplayNotification({ status: "success", title: "Disk label successfully cleared", message: disk.id }, { name: "storagepool-disk-labelclear", id: pool.id });
+                FnDisplayAlert({ status: "success", title: "Disk label successfully cleared", description: disk.id, breakword: false }, { name: "storagepool-disk-labelclear", id: pool.id, timeout: 4 });
             }
 
             FnConsole.log[1]("Storage Pools, Disk Label, Clear: Success, Disk: " + disk.id);
@@ -3174,7 +3592,7 @@ function FnStoragePoolDiskLabelClear(pool = { name, id }, disk = { id, inactive:
         })
         .fail(function (message, data) {
             if (!display.silent) {
-                FnDisplayNotification({ status: "danger", title: "Disk label could not be cleared", message: disk.id }, { name: "storagepool-disk-labelclear", id: pool.id });
+                FnDisplayAlert({ status: "danger", title: "Disk label could not be cleared", description: disk.id, breakword: false }, { name: "storagepool-disk-labelclear", id: pool.id, timeout: 4 });
             }
 
             FnConsole.warn("Storage Pools, Disk Label, Clear: Failed, Disk: " + disk.id + ", Message: " + (data ? data : message));
@@ -3200,12 +3618,12 @@ function FnStoragePoolDiskOffline(pool = { name, id }, disk = { id, force: false
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Disk successfully set offline", message: disk.id }, { name: "storagepool-disk-offline", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Disk successfully set offline", description: disk.id, breakword: false }, { name: "storagepool-disk-offline", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Disk, Offline: Success, Pool: " + pool.name + ", Disk: " + disk.id);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Disk could not be set offline", message: disk.id }, { name: "storagepool-disk-offline", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Disk could not be set offline", description: disk.id, breakword: false }, { name: "storagepool-disk-offline", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Disk, Offline: Failed, Pool: " + pool.name + ", Disk: " + disk.id + ", Message: " + (data ? data : message));
         })
@@ -3237,11 +3655,11 @@ function FnStoragePoolDiskOnline(pool = { name, id, scrub: false }, disk = { id,
             FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Storage Pools, Disk, Online:" }));
 
             if (/^warning:/gi.test(data)) {
-                FnDisplayNotification({ status: "warning", title: "Disk set online but remains in faulted state", message: disk.id }, { name: "storagepool-disk-online", id: pool.id });
+                FnDisplayAlert({ status: "warning", title: "Disk set online but remains in faulted state", description: disk.id, breakword: false }, { name: "storagepool-disk-online", id: pool.id, timeout: 4 });
 
                 FnConsole.warn("Storage Pools, Disk, Online: Warning, Pool: " + pool.name + ", Message: " + (data ? data.replace(/^warning: /gi, "") : message));
             } else {
-                FnDisplayNotification({ status: "success", title: "Disk successfully set online", message: disk.id }, { name: "storagepool-disk-online", id: pool.id });
+                FnDisplayAlert({ status: "success", title: "Disk successfully set online", description: disk.id, breakword: false }, { name: "storagepool-disk-online", id: pool.id, timeout: 4 });
 
                 FnConsole.log[1]("Storage Pools, Disk, Online: Success, Pool: " + pool.name + ", Disk: " + disk.id);
             }
@@ -3251,7 +3669,7 @@ function FnStoragePoolDiskOnline(pool = { name, id, scrub: false }, disk = { id,
             }
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Disk could not be set online", message: disk.id }, { name: "storagepool-disk-online", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Disk could not be set online", description: disk.id, breakword: false }, { name: "storagepool-disk-online", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Disk, Online: Failed, Pool: " + pool.name + ", Disk: " + disk.id + ", Message: " + (data ? data : message));
         })
@@ -3264,7 +3682,7 @@ function FnStoragePoolDiskOnline(pool = { name, id, scrub: false }, disk = { id,
         });;
 }
 
-function FnStoragePoolDiskReplace(pool = { name, id, force: false }, disk = { id, idnew, wwn: false }, modal = { name, id }) {
+function FnStoragePoolDiskReplace(pool = { name, id, force: false }, disk = { id, idnew }, modal = { name, id }) {
     let process = {
         command: ["/sbin/zpool", "replace", pool.name, disk.id, disk.idnew]
     };
@@ -3280,12 +3698,12 @@ function FnStoragePoolDiskReplace(pool = { name, id, force: false }, disk = { id
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Disk replaced successfully on Storage Pool", message: pool.name }, { name: "storagepool-disk-replace", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Disk replaced successfully on Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-disk-replace", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Disk, Replace: Success, Pool: " + pool.name + ", Disk: " + disk.id);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Disk could not be replaced on Storage Pool", message: pool.name }, { name: "storagepool-disk-replace", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Disk could not be replaced on Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-disk-replace", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Disk, Replace: Failed, Pool: " + pool.name + ", Disk: " + disk.id + ", Message: " + (data ? data : message));
         })
@@ -3301,8 +3719,10 @@ function FnStoragePoolDiskReplace(pool = { name, id, force: false }, disk = { id
 function FnStoragePoolExport(pool = { name, id, altroot: false, force: false, readonly: false }, samba = { restart: false }) {
     if (samba.restart) {
         FnSambaStop()
-            .done(function () {
+            .finally(function () {
                 if (zfsmanager.configuration.samba.manage) {
+                    $("#spinner-storagepool-export-" + pool.id + " span").text("Retrieving Samba shares...");
+
                     FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: null, clones: [] })
                         .done(function (data) {
                             FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Samba, Shares, Get:" }));
@@ -3333,6 +3753,10 @@ function FnStoragePoolExport(pool = { name, id, altroot: false, force: false, re
                                         FnSambaStart();
                                     });
                             }
+                        })
+                        .fail(function (message, data) {
+                            FnStoragePoolExportFail({ name: pool.name, id: pool.id }, { data: data, message: message }, { refresh: true });
+                            FnSambaStart();
                         });
                 } else {
                     FnStoragePoolExportCommand({ name: pool.name, id: pool.id, force: pool.force }, { refresh: true })
@@ -3343,6 +3767,8 @@ function FnStoragePoolExport(pool = { name, id, altroot: false, force: false, re
             });
     } else {
         if (zfsmanager.configuration.samba.manage) {
+            $("#spinner-storagepool-export-" + pool.id + " span").text("Retrieving Samba shares...");
+
             FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: null, clones: [] })
                 .done(function (data) {
                     FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Samba, Shares, Get:" }));
@@ -3370,6 +3796,9 @@ function FnStoragePoolExport(pool = { name, id, altroot: false, force: false, re
                     } else {
                         FnStoragePoolExportCommand({ name: pool.name, id: pool.id, force: pool.force }, { refresh: true });
                     }
+                })
+                .fail(function (message, data) {
+                    FnStoragePoolExportFail({ name: pool.name, id: pool.id }, { data: data, message: message }, { refresh: true });
                 });
         } else {
             FnStoragePoolExportCommand({ name: pool.name, id: pool.id, force: pool.force }, { refresh: true });
@@ -3391,14 +3820,12 @@ function FnStoragePoolExportCommand(pool = { name, id, force: false }, display =
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Storage Pool successfully exported", message: pool.name }, { name: "storagepool-export", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Storage Pool successfully exported", description: pool.name, breakword: false }, { name: "storagepool-export", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Export: Success, Pool: " + pool.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Storage Pool could not be exported", message: pool.name }, { name: "storagepool-export", id: pool.id });
-
-            FnConsole.warn("Storage Pools, Export: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
+            FnStoragePoolExportFail({ name: pool.name, id: pool.id }, { data: data, message: message }, { refresh: false });
 
             display.refresh = true;
         })
@@ -3411,6 +3838,20 @@ function FnStoragePoolExportCommand(pool = { name, id, force: false }, display =
                 }, 200);
             }
         });
+}
+
+function FnStoragePoolExportFail(pool = { name, id }, process = { data, message }, display = { refresh: true }) {
+    FnDisplayAlert({ status: "danger", title: "Storage Pool could not be exported", description: pool.name, breakword: false }, { name: "storagepool-export", id: pool.id, timeout: 4 });
+
+    FnConsole.warn("Storage Pools, Export: Failed, Pool: " + pool.name + ", Message: " + (process.data ? process.data : process.message));
+
+    if (display.refresh) {
+        $("#modal-storagepool-export-" + pool.id).modal("hide");
+
+        setTimeout(function () {
+            FnStoragePoolsGet();
+        }, 200);
+    }
 }
 
 function FnStoragePoolHealthIcon(pool = { health }) {
@@ -3459,13 +3900,17 @@ function FnStoragePoolHealthIcon(pool = { health }) {
     return pool.healthicon;
 }
 
-function FnStoragePoolImport(pool = { name, altroot, destroyed: false, force: false, guid, ignoremissinglog: false, namenew, readonly: false, recoverymode: false }, filesystem = { selinux: true }, disks = { wwn: true }) {
+function FnStoragePoolImport(pool = { name, altroot, destroyed: false, force: false, guid, ignoremissinglog: false, namenew, readonly: false, recoverymode: false }, filesystem = { mount: true, selinux: true }, disks = { id: { blockdevice: true, disk: false, path: false, vdev: false }, identifier }) {
     let process = {
         command: ["/sbin/zpool", "import", pool.guid]
     };
     let modal = {
         hide: true
     };
+
+    disks.devpath = "/dev";
+    disks.fallback = false;
+    disks.identifiertext = "Block Device";
 
     if (pool.namenew) {
         pool.name = pool.namenew;
@@ -3475,6 +3920,10 @@ function FnStoragePoolImport(pool = { name, altroot, destroyed: false, force: fa
 
     pool.id = FnGenerateId({ at: false, colon: true, forwardslash: false, period: true, underscore: true, whitespace: true }, { name: pool.name, attribute: true });
     pool.imported = false;
+
+    if (!filesystem.mount) {
+        process.command.splice(2, 0, "-N");
+    }
 
     if (pool.altroot) {
         process.command.splice(2, 0, "-o");
@@ -3498,7 +3947,35 @@ function FnStoragePoolImport(pool = { name, altroot, destroyed: false, force: fa
     }
 
     process.command.splice(2, 0, "-d");
-    process.command.splice(3, 0, (disks.wwn ? "/dev/disk/by-id" : "/dev"));
+
+    switch (disks.identifier) { //Fallback to block device to prevent import error when selected identifier is not available
+        case "disk":
+            if (disks.id.disk) {
+                disks.devpath = "/dev/disk/by-id";
+            } else {
+                disks.fallback = true;
+            }
+            disks.identifiertext = "Disk / WWN";
+            break;
+        case "path":
+            if (disks.id.path) {
+                disks.devpath = "/dev/disk/by-path";
+            } else {
+                disks.fallback = true;
+            }
+            disks.identifiertext = "Hardware Path";
+            break;
+        case "vdev":
+            if (disks.id.vdev) {
+                disks.devpath = "/dev/disk/by-vdev";
+            } else {
+                disks.fallback = true;
+            }
+            disks.identifiertext = "Virtual Device Mapping";
+            break;
+    }
+
+    process.command.splice(3, 0, disks.devpath);
 
     FnConsole.log[1]("Storage Pools, Import: In Progress, Pool: " + pool.name);
     FnConsole.log[3](FnConsoleCommand({ command: process.command }));
@@ -3509,15 +3986,21 @@ function FnStoragePoolImport(pool = { name, altroot, destroyed: false, force: fa
         .done(function () {
             pool.imported = true;
 
-            FnDisplayNotification({ status: "success", title: "Storage Pool successfully imported", message: pool.name }, { name: "storagepools-import", id: pool.id });
+            if (disks.fallback) {
+                FnDisplayAlert({ status: "warning", title: "Storage Pool imported with errors", description: pool.name, breakword: false }, { name: "storagepools-import", id: pool.id, timeout: 4 });
 
-            FnConsole.log[1]("Storage Pools, Import: Success, Pool: " + pool.name);
+                FnConsole.warn("Storage Pools, Import: Warning, Pool: " + pool.name + ", Message: " + disks.identifiertext + " disks identifier was not available during import. Block Device disks identifier was used.");
+            } else {
+                FnDisplayAlert({ status: "success", title: "Storage Pool successfully imported", description: pool.name, breakword: false }, { name: "storagepools-import", id: pool.id, timeout: 4 });
+
+                FnConsole.log[1]("Storage Pools, Import: Success, Pool: " + pool.name);
+            }
         })
         .fail(function (message, data) {
             if (/cannot mount.*directory is not empty|smb add share failed|cannot share/gi.test(data)) { //Storage pool has successfully imported, however a file system error is generated
                 pool.imported = true;
 
-                FnDisplayNotification({ status: "warning", title: "Storage Pool imported with errors", message: pool.name }, { name: "storagepools-import", id: pool.id });
+                FnDisplayAlert({ status: "warning", title: "Storage Pool imported with errors", description: pool.name, breakword: false }, { name: "storagepools-import", id: pool.id, timeout: 4 });
 
                 FnConsole.warn("Storage Pools, Import: Warning, Pool: " + pool.name + ", Message: " + (data ? data : message));
             } else if (/cannot import.*pool already exists/gi.test(data)) {
@@ -3530,7 +4013,7 @@ function FnStoragePoolImport(pool = { name, altroot, destroyed: false, force: fa
                 $("#helpblock-storagepools-import-storagepools").removeClass("hidden").text("Storage pool name already exists. New name is needed.");
                 $("#input-storagepools-import-namenew").focus();
             } else {
-                FnDisplayNotification({ status: "danger", title: "Storage Pool could not be imported", message: pool.name }, { name: "storagepools-import", id: pool.id });
+                FnDisplayAlert({ status: "danger", title: "Storage Pool could not be imported", description: pool.name, breakword: false }, { name: "storagepools-import", id: pool.id, timeout: 4 });
             }
 
             if (!modal.hide) {
@@ -3681,7 +4164,7 @@ function FnStoragePoolRefresh(pool = { name, id }, refresh = { storagepool: true
             $("#btn-storagepool-filesystems-refresh-" + pool.id).prop("disabled", true);
             $("[id^=btn-storagepool-filesystem-dropdown-" + pool.id + "]").addClass("disabled");
             $("#paneltitle-storagepool-filesystems-" + pool.id).addClass("hidden");
-            $("#spinner-storagepool-filesystems-" + pool.id).removeClass("hidden");            
+            $("#spinner-storagepool-filesystems-" + pool.id).removeClass("hidden");
 
             FnFileSystemsGet({ name: pool.name, id: pool.id });
         }
@@ -3691,7 +4174,7 @@ function FnStoragePoolRefresh(pool = { name, id }, refresh = { storagepool: true
             $("#btn-storagepool-snapshots-refresh-" + pool.id).prop("disabled", true);
             $("[id^=btn-storagepool-snapshot-dropdown-" + pool.id + "]").addClass("disabled");
             $("#paneltitle-storagepool-snapshots-" + pool.id).addClass("hidden");
-            $("#spinner-storagepool-snapshots-" + pool.id).removeClass("hidden");            
+            $("#spinner-storagepool-snapshots-" + pool.id).removeClass("hidden");
 
             FnSnapshotsGet({ name: pool.name, id: pool.id });
         }
@@ -3843,12 +4326,12 @@ function FnStoragePoolRegenerateGuid(pool = { name, id }, modal = { name, id }) 
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Storage Pool GUID successfully regenerated", message: pool.name }, { name: "storagepool-regenerateguid", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Storage Pool GUID successfully regenerated", description: pool.name, breakword: false }, { name: "storagepool-regenerateguid", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Regenerate GUID: Success, Pool: " + pool.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Storage Pool GUID could not be regenerated", message: pool.name }, { name: "storagepool-regenerateguid", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Storage Pool GUID could not be regenerated", description: pool.name, breakword: false }, { name: "storagepool-regenerateguid", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Regenerate GUID: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
         })
@@ -3873,12 +4356,12 @@ function FnStoragePoolResilver(pool = { name, id }, modal = { name, id }) {
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Storage Pool resilver successfully started", message: pool.name }, { name: "storagepool-resilver", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Storage Pool resilver successfully started", description: pool.name, breakword: false }, { name: "storagepool-resilver", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Resilver, Start: Success, Pool: " + pool.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Storage Pool resilver could not be started", message: pool.name }, { name: "storagepool-resilver", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Storage Pool resilver could not be started", description: pool.name, breakword: false }, { name: "storagepool-resilver", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Resilver, Start: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
         })
@@ -3901,12 +4384,12 @@ function FnStoragePoolScrubPause(pool = { name, id }, display = { refresh: true 
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Storage Pool scrub successfully paused", message: pool.name }, { name: "storagepool-scrub-pause", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Storage Pool scrub successfully paused", description: pool.name, breakword: false }, { name: "storagepool-scrub-pause", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Scrub, Pause: Success, Pool: " + pool.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Storage Pool scrub could not be paused", message: pool.name }, { name: "storagepool-scrub-pause", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Storage Pool scrub could not be paused", description: pool.name, breakword: false }, { name: "storagepool-scrub-pause", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Scrub, Pause: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
         })
@@ -3929,20 +4412,20 @@ function FnStoragePoolScrubStart(pool = { name, id }, scrub = { resume: false },
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Storage Pool scrub successfully " + (scrub.resume ? "resumed" : "started"), message: pool.name }, { name: "storagepool-scrub-start", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Storage Pool scrub successfully " + (scrub.resume ? "resumed" : "started"), description: pool.name, breakword: false }, { name: "storagepool-scrub-start", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Scrub, " + (scrub.resume ? "Resume" : "Start") + ": Success, Pool: " + pool.name);
         })
         .fail(function (message, data) {
             if (/currently scrubbing/gi.test(data)) { //Start scrub will fail if the storage pool has already initiated scrub
-                FnDisplayNotification({ status: "success", title: "Storage Pool scrub successfully " + (scrub.resume ? "resumed" : "started"), message: pool.name }, { name: "storagepool-scrub-start", id: pool.id });
+                FnDisplayAlert({ status: "success", title: "Storage Pool scrub successfully " + (scrub.resume ? "resumed" : "started"), description: pool.name, breakword: false }, { name: "storagepool-scrub-start", id: pool.id, timeout: 4 });
 
                 FnConsole.log[1]("Storage Pools, Scrub, " + (scrub.resume ? "Resume" : "Start") + ": Success, Pool: " + pool.name);
             } else {
                 if (/currently resilvering/gi.test(data)) { //Start scrub will fail if the storage pool has initiated resilver
-                    FnDisplayNotification({ status: "warning", title: "Storage Pool scrub could not be " + (scrub.resume ? "resumed" : "started") + ". Resilver in progress", message: pool.name }, { name: "storagepool-scrub-start", id: pool.id });
+                    FnDisplayAlert({ status: "warning", title: "Storage Pool scrub could not be " + (scrub.resume ? "resumed" : "started") + ". Resilver in progress", description: pool.name, breakword: false }, { name: "storagepool-scrub-start", id: pool.id, timeout: 4 });
                 } else {
-                    FnDisplayNotification({ status: "danger", title: "Storage Pool scrub could not be " + (scrub.resume ? "resumed" : "started"), message: pool.name }, { name: "storagepool-scrub-start", id: pool.id });
+                    FnDisplayAlert({ status: "danger", title: "Storage Pool scrub could not be " + (scrub.resume ? "resumed" : "started"), description: pool.name, breakword: false }, { name: "storagepool-scrub-start", id: pool.id, timeout: 4 });
                 }
 
                 FnConsole.warn("Storage Pools, Scrub, " + (scrub.resume ? "Resume" : "Start") + ": Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
@@ -3967,12 +4450,12 @@ function FnStoragePoolScrubStop(pool = { name, id }, display = { refresh: true }
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Storage Pool scrub successfully stopped", message: pool.name }, { name: "storagepool-scrub-stop", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Storage Pool scrub successfully stopped", description: pool.name, breakword: false }, { name: "storagepool-scrub-stop", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Scrub, Stop: Success, Pool: " + pool.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Storage Pool scrub could not be stopped", message: pool.name }, { name: "storagepool-scrub-stop", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Storage Pool scrub could not be stopped", description: pool.name, breakword: false }, { name: "storagepool-scrub-stop", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Scrub, Stop: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
         })
@@ -4008,7 +4491,7 @@ function FnStoragePoolSelinuxContextsSambaSet(pool = { name, id }, display = { s
                                 .finally(function () {
                                     if (_index == (filesystems.length - 1)) {
                                         if (!display.silent) {
-                                            FnDisplayNotification({ status: "success", title: "SELinux contexts for Samba successfully configured", message: pool.name }, { name: "selinux-enable", id: pool.id });
+                                            FnDisplayAlert({ status: "success", title: "SELinux contexts for Samba successfully configured", description: pool.name, breakword: false }, { name: "selinux-enable", id: pool.id, timeout: 4 });
                                         }
 
                                         process.promise.resolve();
@@ -4021,7 +4504,7 @@ function FnStoragePoolSelinuxContextsSambaSet(pool = { name, id }, display = { s
                 });
             } else {
                 if (!display.silent) {
-                    FnDisplayNotification({ status: "success", title: "SELinux contexts for Samba successfully configured", message: pool.name }, { name: "selinux-enable", id: pool.id });
+                    FnDisplayAlert({ status: "success", title: "SELinux contexts for Samba successfully configured", description: pool.name, breakword: false }, { name: "selinux-enable", id: pool.id, timeout: 4 });
                 }
 
                 process.promise.resolve();
@@ -4029,7 +4512,7 @@ function FnStoragePoolSelinuxContextsSambaSet(pool = { name, id }, display = { s
         })
         .fail(function (message, data) {
             if (!display.silent) {
-                FnDisplayNotification({ status: "danger", title: "SELinux contexts for Samba could not be configured", message: pool.name }, { name: "selinux-enable", id: pool.id });
+                FnDisplayAlert({ status: "danger", title: "SELinux contexts for Samba could not be configured", description: pool.name, breakword: false }, { name: "selinux-enable", id: pool.id, timeout: 4 });
             }
 
             FnConsole.warn("Storage Pools, SELinux Contexts, Samba, Set: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
@@ -4081,12 +4564,12 @@ function FnStoragePoolTrimCancel(pool = { name, id }, disk = { id }) {
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM successfully cancelled", message: (disk.id ? disk.id : pool.name) }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-cancel", id: pool.id });
+            FnDisplayAlert({ status: "success", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM successfully cancelled", description: (disk.id ? disk.id : pool.name), breakword: false }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-cancel", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, " + (disk.id ? "Disk, " : "") + "TRIM, Cancel: Success, Pool: " + pool.name + (disk.id ? ", Disk: " + disk.id : ""));
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM could not be cancelled", message: (disk.id ? disk.id : pool.name) }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-cancel", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM could not be cancelled", description: (disk.id ? disk.id : pool.name), breakword: false }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-cancel", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, " + (disk.id ? "Disk, " : "") + "TRIM, Cancel: Failed, Pool: " + pool.name + (disk.id ? ", Disk: " + disk.id : "") + ", Message: " + (data ? data : message));
         })
@@ -4118,12 +4601,12 @@ function FnStoragePoolTrimStart(pool = { name, id }, disk = { id }, trim = { res
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM successfully " + (trim.resume ? "resumed" : "started"), message: (disk.id ? disk.id : pool.name) }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-start", id: pool.id });
+            FnDisplayAlert({ status: "success", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM successfully " + (trim.resume ? "resumed" : "started"), description: (disk.id ? disk.id : pool.name), breakword: false }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-start", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, " + (disk.id ? "Disk, " : "") + "TRIM, " + (trim.resume ? "Resume" : "Start") + ": Success, Pool: " + pool.name + (disk.id ? ", Disk: " + disk.id : ""));
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM could not be " + (trim.resume ? "resumed" : "started"), message: (disk.id ? disk.id : pool.name) }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-start", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM could not be " + (trim.resume ? "resumed" : "started"), description: (disk.id ? disk.id : pool.name), breakword: false }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-start", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, " + (disk.id ? "Disk, " : "") + "TRIM, " + (trim.resume ? "Resume" : "Start") + ": Failed, Pool: " + pool.name + (disk.id ? ", Disk: " + disk.id : "") + ", Message: " + (data ? data : message));
         })
@@ -4152,12 +4635,12 @@ function FnStoragePoolTrimSuspend(pool = { name, id }, disk = { id }) {
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM successfully suspended", message: (disk.id ? disk.id : pool.name) }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-suspend", id: pool.id });
+            FnDisplayAlert({ status: "success", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM successfully suspended", description: (disk.id ? disk.id : pool.name), breakword: false }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-suspend", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, " + (disk.id ? "Disk, " : "") + "TRIM, Suspend: Success, Pool: " + pool.name + (disk.id ? ", Disk: " + disk.id : ""));
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM could not be suspended", message: (disk.id ? disk.id : pool.name) }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-suspend", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: (disk.id ? "Disk" : "Storage Pool") + " TRIM could not be suspended", description: (disk.id ? disk.id : pool.name), breakword: false }, { name: "storagepool-" + (disk.id ? "disk-" : "") + "trim-suspend", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, " + (disk.id ? "Disk, " : "") + "TRIM, Suspend: Failed, Pool: " + pool.name + (disk.id ? ", Disk: " + disk.id : "") + ", Message: " + (data ? data : message));
         })
@@ -4183,7 +4666,7 @@ function FnStoragePoolUpgrade(pool = { name, id }, modal = { name, id }) {
             FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Storage Pools, Upgrade:" }));
 
             if (/Successfully upgraded|Enabled the following features/gi.test(data)) {
-                FnDisplayNotification({ status: "success", title: "Storage Pool successfully upgraded", message: pool.name }, { name: "storagepool-upgrade", id: pool.id });
+                FnDisplayAlert({ status: "success", title: "Storage Pool successfully upgraded", description: pool.name, breakword: false }, { name: "storagepool-upgrade", id: pool.id, timeout: 4 });
 
                 FnConsole.log[1]("Storage Pools, Upgrade: Success, Pool: " + pool.name);
             } else {
@@ -4203,7 +4686,7 @@ function FnStoragePoolUpgrade(pool = { name, id }, modal = { name, id }) {
 }
 
 function FnStoragePoolUpgradeFail(pool = { name, id }, process = { data, message }) {
-    FnDisplayNotification({ status: "danger", title: "Storage Pool could not be upgraded", message: pool.name }, { name: "storagepool-upgrade", id: pool.id });
+    FnDisplayAlert({ status: "danger", title: "Storage Pool could not be upgraded", description: pool.name, breakword: false }, { name: "storagepool-upgrade", id: pool.id, timeout: 4 });
 
     FnConsole.warn("Storage Pools, Upgrade: Failed, Pool: " + pool.name + ", Message: " + (process.data ? process.data : process.message));
 }
@@ -4242,7 +4725,7 @@ function FnStoragePoolVirtualDeviceAdd(pool = { name, id, force: false, virtuald
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Virtual Device successfully added to Storage Pool", message: pool.name }, { name: "storagepool-virtualdevice-add", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Virtual Device successfully added to Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-virtualdevice-add", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Virtual Device, Add: Success, Pool: " + pool.name);
         })
@@ -4268,7 +4751,7 @@ function FnStoragePoolVirtualDeviceAdd(pool = { name, id, force: false, virtuald
             }
 
             if (modal.hide) {
-                FnDisplayNotification({ status: "danger", title: "Virtual Device could not be added to Storage Pool", message: pool.name }, { name: "storagepool-virtualdevice-add", id: pool.id });
+                FnDisplayAlert({ status: "danger", title: "Virtual Device could not be added to Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-virtualdevice-add", id: pool.id, timeout: 4 });
             }
 
             FnConsole.warn("Storage Pools, Virtual Device, Add: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
@@ -4296,12 +4779,12 @@ function FnStoragePoolVirtualDeviceClear(pool = { name, id }, virtualdevice = { 
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Virtual Device errors successfully cleared", message: virtualdevice.id }, { name: "storagepool-virtualdevice-clear", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Virtual Device errors successfully cleared", description: virtualdevice.id, breakword: false }, { name: "storagepool-virtualdevice-clear", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Virtual Device, Clear Errors: Success, Pool: " + pool.name + ", Virtual Device: " + virtualdevice.id);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Virtual Device errors could not be cleared", message: virtualdevice.id }, { name: "storagepool-virtualdevice-clear", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Virtual Device errors could not be cleared", description: virtualdevice.id, breakword: false }, { name: "storagepool-virtualdevice-clear", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Virtual Device, Clear Errors: Failed, Pool: " + pool.name + ", Virtual Device: " + virtualdevice.id + ", Message: " + (data ? data : message));
         })
@@ -4328,7 +4811,7 @@ function FnStoragePoolVirtualDeviceRemove(pool = { name, id }, virtualdevice = {
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Virtual Device successfully removed from Storage Pool", message: pool.name }, { name: "storagepool-virtualdevice-remove", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Virtual Device successfully removed from Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-virtualdevice-remove", id: pool.id, timeout: 4 });
 
             FnConsole.log[1]("Storage Pools, Virtual Device, Remove: Success, Pool: " + pool.name + ", Virtual Device: " + virtualdevice.id);
 
@@ -4350,7 +4833,7 @@ function FnStoragePoolVirtualDeviceRemove(pool = { name, id }, virtualdevice = {
             }
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Virtual Device could not be removed from Storage Pool", message: pool.name }, { name: "storagepool-virtualdevice-remove", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Virtual Device could not be removed from Storage Pool", description: pool.name, breakword: false }, { name: "storagepool-virtualdevice-remove", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Storage Pools, Virtual Device, Remove: Failed, Pool: " + pool.name + ", Virtual Device: " + virtualdevice.id + ", Message: " + (data ? data : message));
         })
@@ -4424,7 +4907,7 @@ function FnFileSystemsGet(pool = { name, id }) {
         .finally(function () {
             if (filesystems.empty) {
                 $("#tbody-storagepool-filesystems-" + pool.id).empty();
-                $("#tbody-storagepool-filesystems-" + pool.id).append(`<tr><td colspan="12">No file systems found.</th></tr>`);
+                $("#tbody-storagepool-filesystems-" + pool.id).append(`<tr><td colspan="14">No file systems found.</th></tr>`);
                 $("#modals-storagepool-filesystems-" + pool.id).remove();
                 $("#modals-storagepool-filesystem-" + pool.id).remove();
                 $("#modals").append(`<div id="modals-storagepool-filesystems-` + pool.id + `"></div>`);
@@ -4441,7 +4924,7 @@ function FnFileSystemsGet(pool = { name, id }) {
                 $("#btn-storagepool-filesystems-create-" + pool.id).prop("disabled", false);
                 $("#btn-storagepool-filesystems-refresh-" + pool.id).prop("disabled", false);
             }
-            
+
             FnStoragePoolSpinnerHide({ name: pool.name, id: pool.id });
             FnCockpitElementsUpdate();
         });
@@ -4997,7 +5480,7 @@ function FnFileSystemsMountedGet(pool = { name, id }, filesystem = { name, id },
             });
 
             if (filesystem.children.mounted) {
-                modal.alert.id.html(`<div class="alert alert-warning"><span class="pficon pficon-warning-triangle-o"></span><span>There are child file systems currently mounted. ` + (modal.alert.mount ? "Mounting" : "Unmounting") + ` this file system may adversely affect the child file systems.</span></div>`);
+                modal.alert.id.html(FnDisplayInlineAlert({ status: "warning", title: "There are child file systems currently mounted. " + (modal.alert.mount ? "Mounting" : "Unmounting") + " this file system may adversely affect the child file systems.", description: null }, { name: null, id: null, hidden: false }));
             }
 
             FnConsole.log[1]("File Systems, Mounted, Get: Success, Pool: " + pool.name);
@@ -5041,7 +5524,7 @@ function FnFileSystemsNamesGet(pool = { name, id }, filesystem = { existing: { n
                 }
 
                 modal.dropdown.add = false;
-                modal.dropdown.item = `<li ` + (modal.dropdown.selected == filesystem.name ? `class="active" ` : ``) + `value=` + filesystem.name + `><a tabindex="-1">` + filesystem.name + filesystem.encryptionstatus + `</a></li>`;
+                modal.dropdown.item = `<li ` + (modal.dropdown.selected == filesystem.name ? `class="active" ` : ``) + `value="` + filesystem.name + `"><a tabindex="-1">` + filesystem.name + filesystem.encryptionstatus + `</a></li>`;
 
                 if ((filesystem.override || filesystem.existing.encryption) && filesystem.existing.clone) { //Encrypted clone file systems can only move within origin and child file systems
                     filesystem.existing.regexp.origin = new RegExp("^" + filesystem.existing.origin.replace(/^(.*)\@.*$/, "$1\/"), "g");
@@ -5091,7 +5574,7 @@ function FnFileSystemsUnlock(filesystems = { id: [] }, filesystem = { mount: tru
     };
 
     $("#listgroup-" + modal.name + modal.id + "-filesystems > li.list-group-item > label > span.pficon").removeClass("list-group-ct-warning");
-    
+
     if (filesystems.id.length > 0) {
         FnConsole.log[2]("File Systems, Unlock: In Progress");
 
@@ -5131,26 +5614,26 @@ function FnFileSystemsUnlock(filesystems = { id: [] }, filesystem = { mount: tru
                                 filesystems.count.error++;
 
                                 $("#listgroup-" + modal.name + modal.id + "-filesystems > li.list-group-item[data-filesystem-name='" + filesystem.name + "'] > label > span.pficon").addClass("list-group-ct-warning");
-                            }                            
+                            }
                         })
                         .finally(function () {
                             if (_index == (filesystems.id.length - 1)) {
+                                $("#listgroup-storagepools-filesystems-unlock-filesystems input[name='checkbox-storagepools-filesystems-unlock-filesystems']").map(function () {
+                                    filesystems.count.available++;
+                                });
+
                                 if (filesystems.count.error == 0) {
                                     FnConsole.log[1]("File Systems, Unlock: Success");
-
-                                    $("#listgroup-storagepools-filesystems-unlock-filesystems input[name='checkbox-storagepools-filesystems-unlock-filesystems']").map(function () {
-                                        filesystems.count.available++;
-                                    });
-
-                                    if (filesystems.count.available == 0) {
-                                        $("#modal-" + modal.name + modal.id).modal("hide");
-                                    } else {
-                                        $("#spinner-" + modal.name + modal.id).addClass("hidden");
-                                        $("#spinner-" + modal.name + modal.id + " span").text("");
-                                        $("#btn-" + modal.name + "-apply" + modal.id).prop("disabled", false);
-                                    }                                    
                                 } else {
                                     FnConsole.warn("File Systems, Unlock: Failed");
+                                }
+
+                                if (filesystems.count.available == 0) {
+                                    $("#modal-" + modal.name + modal.id).modal("hide");
+                                } else {
+                                    $("#spinner-" + modal.name + modal.id).addClass("hidden");
+                                    $("#spinner-" + modal.name + modal.id + " span").text("");
+                                    $("#btn-" + modal.name + "-apply" + modal.id).prop("disabled", false);
                                 }
 
                                 setTimeout(function () {
@@ -5210,7 +5693,7 @@ function FnFileSystemChangePassphrase(pool = { name, id }, filesystem = { name, 
                 return;
             }
 
-            FnDisplayNotification({ status: "success", title: "File System passphrase successfully changed", message: filesystem.name }, { name: "filesystem-changepassphrase", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "File System passphrase successfully changed", description: filesystem.name, breakword: false }, { name: "filesystem-changepassphrase", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("File Systems, Change Passphrase: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
 
@@ -5261,7 +5744,7 @@ function FnFileSystemChangePassphraseFail(pool = { name, id }, filesystem = { na
     FnConsole.warn("File Systems, Change Passphrase: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (process.data ? process.data : process.message));
 
     if (modal.hide) {
-        FnDisplayNotification({ status: "danger", title: "File System passphrase could not be changed", message: filesystem.name }, { name: "filesystem-changepassphrase", id: filesystem.id });
+        FnDisplayAlert({ status: "danger", title: "File System passphrase could not be changed", description: filesystem.name, breakword: false }, { name: "filesystem-changepassphrase", id: filesystem.id, timeout: 4 });
 
         $("#modal-storagepool-filesystem-changepassphrase-" + filesystem.id).modal("hide");
 
@@ -5427,7 +5910,7 @@ function FnFileSystemChildSnapshotsGet(pool = { name, id }, filesystem = { name,
 
 function FnFileSystemConfigurationGet(pool = { name, id, readonly: false }, filesystem = { name, id }, modal = { name, id }) {
     let process = {
-        command: ["/sbin/zfs", "get", "readonly,aclinherit,acltype,atime,available,canmount,casesensitivity,checksum,compression,context,dedup,dnodesize,defcontext,encryption,encryptionroot,fscontext,guid,mountpoint,recordsize,refreservation,rootcontext,sharenfs,sharesmb,special_small_blocks,xattr", "-H", "-o", "property,value,source", "-p", filesystem.name]
+        command: ["/sbin/zfs", "get", "readonly,aclinherit,acltype,atime,available,canmount,casesensitivity,checksum,compression,context,dedup,dnodesize,defcontext,encryption,encryptionroot,fscontext,guid,mountpoint,quota,recordsize,refreservation,rootcontext,sharenfs,sharesmb,special_small_blocks,used,xattr", "-H", "-o", "property,value,source", "-p", filesystem.name]
     };
 
     if (!zfsmanager.user.admin) {
@@ -5459,6 +5942,8 @@ function FnFileSystemConfigurationGet(pool = { name, id, readonly: false }, file
                     valueraw: _value[1],
                     source: _value[2]
                 };
+
+                let size = {};
 
                 switch (filesystem.properties.property) {
                     case "aclinherit":  //Default is restricted
@@ -6024,6 +6509,114 @@ function FnFileSystemConfigurationGet(pool = { name, id, readonly: false }, file
                             $("#input-" + modal.name + "-mountpoint-" + modal.id).prop("disabled", true);
                         }
                         break;
+                    case "quota": //Default is none
+                        filesystem.property = {
+                            value: "0 B",
+                            valueraw: "0",
+                            valueunit: "KiB"
+                        };
+
+                        if (filesystem.properties.value == "none" || filesystem.properties.value == "0" || filesystem.properties.value == "0b") {
+                            filesystem.property.value = "0 B";
+                        } else {
+                            filesystem.property.value = FnFormatBytes({ base2: true, decimals: 1, value: filesystem.properties.value });
+
+                            if (/KiB/g.test(filesystem.property.value)) {
+                                filesystem.property.valueunit = "KiB";
+                            } else if (/MiB/g.test(filesystem.property.value)) {
+                                filesystem.property.valueunit = "MiB";
+                            } else if (/GiB/g.test(filesystem.property.value)) {
+                                filesystem.property.valueunit = "GiB";
+                            } else if (/TiB/g.test(filesystem.property.value)) {
+                                filesystem.property.valueunit = "TiB";
+                            }
+
+                            filesystem.property.valueraw = filesystem.property.value.toString().replace(" " + filesystem.property.valueunit, "");
+                        }
+
+                        $("#input-" + modal.name + "-quota-" + modal.id).val(filesystem.property.valueraw);
+
+                        size.quota = {
+                            quota: parseInt(filesystem.properties.value),
+                            max: {
+                                raw: 1099511627776000,
+                                unit: "",
+                                unitnumber: 0
+                            },
+                            slider: {
+                                valuemax: 1000
+                            },
+                            property: filesystem.property
+                        };
+
+                        FnStoragePoolSizeGet({ name: pool.name, id: null })
+                            .done(function (_data) {
+                                FnConsole.log[4](FnConsoleVerbose({ data: _data, message: "Storage Pools, Size, Get:" }));
+
+                                if (_data && zfsmanager.configuration.zfs.filesystem.quotarestrict) {
+                                    size.quota.max.raw = parseInt(_data.replace(/\n+/g, ""));
+                                }
+                            })
+                            .finally(function () {
+                                size.quota.max.raw = (size.quota.max.raw > size.quota.quota ? size.quota.max.raw : size.quota.quota);
+                                size.quota.max.unitnumber = FnFormatBytes({ base2: true, decimals: 2, value: size.quota.max.raw }).replace(/ .*$/g, "");
+                                size.quota.max.unit = FnFormatBytes({ base2: true, decimals: 2, value: size.quota.max.raw }).replace(/ /g, "").replace(/^[0-9.]/, "");
+
+                                if (size.quota.max.raw <= 1024000) {
+                                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-kib", size.quota.max.unitnumber);
+                                }
+                                if (size.quota.max.raw > 1024000) {
+                                    $("#dropdown-" + modal.name + "-quota-" + modal.id + " li[value='MiB']").removeClass("hidden");
+
+                                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-kib", size.quota.slider.valuemax);
+                                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-mib", size.quota.max.unitnumber);
+                                }
+                                if (size.quota.max.raw > 1048576000) {
+                                    $("#dropdown-" + modal.name + "-quota-" + modal.id + " li[value='GiB']").removeClass("hidden");
+
+                                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-kib", size.quota.slider.valuemax);
+                                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-mib", size.quota.slider.valuemax);
+                                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-gib", size.quota.max.unitnumber);
+                                }
+                                if (size.quota.max.raw > 1073741824000) {
+                                    $("#dropdown-" + modal.name + "-quota-" + modal.id + " li[value='TiB']").removeClass("hidden");
+
+                                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-kib", size.quota.slider.valuemax);
+                                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-mib", size.quota.slider.valuemax);
+                                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-gib", size.quota.slider.valuemax);
+                                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-tib", size.quota.max.unitnumber);
+                                }
+
+                                if (size.quota.property.valueunit == "KiB") {
+                                    size.quota.slider.valuemax = $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-kib");
+                                }
+                                if (size.quota.property.valueunit == "MiB") {
+                                    size.quota.slider.valuemax = $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-mib");
+                                }
+                                if (size.quota.property.valueunit == "GiB") {
+                                    size.quota.slider.valuemax = $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-gib");
+                                }
+                                if (size.quota.property.valueunit == "TiB") {
+                                    size.quota.slider.valuemax = $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-tib");
+                                }
+
+                                $("#slider-" + modal.name + "-quota-" + modal.id).data("slider").options.max = size.quota.slider.valuemax;
+                                $("#slider-" + modal.name + "-quota-" + modal.id).data("slider").options.step = (size.quota.slider.valuemax < 10 ? "0.1" : "1");
+                                $("#slider-" + modal.name + "-quota-" + modal.id).slider("setValue", size.quota.property.valueraw);
+
+                                $("#btnspan-" + modal.name + "-quota-" + modal.id).text(size.quota.property.valueunit).attr("data-field-value", size.quota.property.valueunit);
+                                $("#dropdown-" + modal.name + "-quota-" + modal.id + " li").siblings().removeClass("active");
+                                $("#dropdown-" + modal.name + "-quota-" + modal.id + " li[value='" + size.quota.property.valueunit + "']").addClass("active");
+                                $("#input-" + modal.name + "-quota-" + modal.id).attr("data-field-value", size.quota.property.value.toString().replace(/ /g, "").replace(/iB$/g, ""));
+                            });
+
+                        if (filesystem.readonly && zfsmanager.configuration.zfs.filesystem.readonlylockdown || pool.readonly) {
+                            $("#input-" + modal.name + "-quota-" + modal.id).prop("disabled", true);
+                            $("#div-" + modal.name + "-quota-dropdown-" + modal.id + " button").prop("disabled", true);
+                            $("#validationwrapper-" + modal.name + "-quota-" + modal.id + " .slider-pf .slider *").addClass("disabled");
+                            $("#slider-" + modal.name + "-quota-" + modal.id).slider("disable");
+                        }
+                        break;
                     case "readonly": //Default is off
                         if (filesystem.properties.value == "on") {
                             filesystem.readonly = true;
@@ -6078,7 +6671,7 @@ function FnFileSystemConfigurationGet(pool = { name, id, readonly: false }, file
                             $("#div-" + modal.name + "-recordsize-dropdown-" + modal.id + " button").prop("disabled", true);
                         }
                         break;
-                    case "refreservation":  //Default is none / 0
+                    case "refreservation": //Default is none / 0
                         filesystem.property = {
                             value: "0 B",
                             valueraw: "0",
@@ -6105,7 +6698,7 @@ function FnFileSystemConfigurationGet(pool = { name, id, readonly: false }, file
 
                         $("#input-" + modal.name + "-refreservation-" + modal.id).val(filesystem.property.valueraw);
 
-                        let size = {
+                        size.refreservation = {
                             available: parseInt(filesystem.available),
                             refreservation: parseInt(filesystem.properties.value),
                             max: {
@@ -6118,51 +6711,51 @@ function FnFileSystemConfigurationGet(pool = { name, id, readonly: false }, file
                             }
                         };
 
-                        size.max.raw = (size.available > size.refreservation ? size.available : size.refreservation);
-                        size.max.unitnumber = FnFormatBytes({ base2: true, decimals: 2, value: size.max.raw }).replace(/ .*$/g, "");
-                        size.max.unit = FnFormatBytes({ base2: true, decimals: 2, value: size.max.raw }).replace(/ /g, "").replace(/^[0-9.]/, "");
-                        
-                        if (size.max.raw <= 1024000) {
-                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-kib", size.max.unitnumber);
+                        size.refreservation.max.raw = (size.refreservation.available > size.refreservation.refreservation ? size.refreservation.available : size.refreservation.refreservation);
+                        size.refreservation.max.unitnumber = FnFormatBytes({ base2: true, decimals: 2, value: size.refreservation.max.raw }).replace(/ .*$/g, "");
+                        size.refreservation.max.unit = FnFormatBytes({ base2: true, decimals: 2, value: size.refreservation.max.raw }).replace(/ /g, "").replace(/^[0-9.]/, "");
+
+                        if (size.refreservation.max.raw <= 1024000) {
+                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-kib", size.refreservation.max.unitnumber);
                         }
-                        if (size.max.raw > 1024000) {
+                        if (size.refreservation.max.raw > 1024000) {
                             $("#dropdown-" + modal.name + "-refreservation-" + modal.id + " li[value='MiB']").removeClass("hidden");
 
-                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-kib", size.slider.valuemax);
-                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-mib", size.max.unitnumber);
+                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-kib", size.refreservation.slider.valuemax);
+                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-mib", size.refreservation.max.unitnumber);
                         }
-                        if (size.max.raw > 1048576000) {
+                        if (size.refreservation.max.raw > 1048576000) {
                             $("#dropdown-" + modal.name + "-refreservation-" + modal.id + " li[value='GiB']").removeClass("hidden");
 
-                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-kib", size.slider.valuemax);
-                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-mib", size.slider.valuemax);
-                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-gib", size.max.unitnumber);
+                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-kib", size.refreservation.slider.valuemax);
+                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-mib", size.refreservation.slider.valuemax);
+                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-gib", size.refreservation.max.unitnumber);
                         }
-                        if (size.max.raw > 1073741824000) {
+                        if (size.refreservation.max.raw > 1073741824000) {
                             $("#dropdown-" + modal.name + "-refreservation-" + modal.id + " li[value='TiB']").removeClass("hidden");
 
-                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-kib", size.slider.valuemax);
-                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-mib", size.slider.valuemax);
-                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-gib", size.slider.valuemax);
-                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-tib", size.max.unitnumber);
+                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-kib", size.refreservation.slider.valuemax);
+                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-mib", size.refreservation.slider.valuemax);
+                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-gib", size.refreservation.slider.valuemax);
+                            $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-tib", size.refreservation.max.unitnumber);
                         }
 
                         if (filesystem.property.valueunit == "KiB") {
-                            size.slider.valuemax = $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-kib");
+                            size.refreservation.slider.valuemax = $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-kib");
                         }
                         if (filesystem.property.valueunit == "MiB") {
-                            size.slider.valuemax = $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-mib");
+                            size.refreservation.slider.valuemax = $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-mib");
                         }
                         if (filesystem.property.valueunit == "GiB") {
-                            size.slider.valuemax = $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-gib");
+                            size.refreservation.slider.valuemax = $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-gib");
                         }
                         if (filesystem.property.valueunit == "TiB") {
-                            size.slider.valuemax = $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-tib");
+                            size.refreservation.slider.valuemax = $("#input-" + modal.name + "-refreservation-" + modal.id).attr("data-filesystem-refreservation-max-tib");
                         }
 
-                        $("#slider-" + modal.name + "-refreservation-" + filesystem.id).data("slider").options.max = size.slider.valuemax;
-                        $("#slider-" + modal.name + "-refreservation-" + filesystem.id).data("slider").options.step = (size.slider.valuemax < 10 ? "0.1" : "1");
-                        $("#slider-" + modal.name + "-refreservation-" + filesystem.id).slider("setValue", filesystem.property.valueraw);
+                        $("#slider-" + modal.name + "-refreservation-" + modal.id).data("slider").options.max = size.refreservation.slider.valuemax;
+                        $("#slider-" + modal.name + "-refreservation-" + modal.id).data("slider").options.step = (size.refreservation.slider.valuemax < 10 ? "0.1" : "1");
+                        $("#slider-" + modal.name + "-refreservation-" + modal.id).slider("setValue", filesystem.property.valueraw);
 
                         $("#btnspan-" + modal.name + "-refreservation-" + modal.id).text(filesystem.property.valueunit).attr("data-field-value", filesystem.property.valueunit);
                         $("#dropdown-" + modal.name + "-refreservation-" + modal.id + " li").siblings().removeClass("active");
@@ -6172,8 +6765,8 @@ function FnFileSystemConfigurationGet(pool = { name, id, readonly: false }, file
                         if (filesystem.readonly && zfsmanager.configuration.zfs.filesystem.readonlylockdown || pool.readonly) {
                             $("#input-" + modal.name + "-refreservation-" + modal.id).prop("disabled", true);
                             $("#div-" + modal.name + "-refreservation-dropdown-" + modal.id + " button").prop("disabled", true);
-                            $("#validationwrapper-" + modal.name + "-refreservation-" + filesystem.id + " .slider-pf .slider *").addClass("disabled");
-                            $("#slider-" + modal.name + "-refreservation-" + filesystem.id).slider("disable");
+                            $("#validationwrapper-" + modal.name + "-refreservation-" + modal.id + " .slider-pf .slider *").addClass("disabled");
+                            $("#slider-" + modal.name + "-refreservation-" + modal.id).slider("disable");
                         }
                         break;
                     case "rootcontext": //Default is empty
@@ -6191,7 +6784,7 @@ function FnFileSystemConfigurationGet(pool = { name, id, readonly: false }, file
                             $("#validationwrapper-" + modal.name + "-sharenfs-options-" + modal.id).removeClass("hidden");
                             $("#input-" + modal.name + "-sharenfs-options-" + modal.id).val((filesystem.properties.value == "on" ? "sec=sys,rw,crossmnt,no_subtree_check,no_root_squash" : filesystem.properties.value));
 
-                            FnSystemNfsVersionGet({ alert: { id: $("#alert-storagepool-filesystem-configure-sharenfs-options-" + filesystem.id) } });
+                            FnSystemNfsVersionGet({ alert: { id: $("#alert-" + modal.name + "-sharenfs-options-" + modal.id) } });
                         }
 
                         $("#input-" + modal.name + "-sharenfs-options-" + modal.id).attr("data-field-value", filesystem.properties.value);
@@ -6250,6 +6843,21 @@ function FnFileSystemConfigurationGet(pool = { name, id, readonly: false }, file
                         if (filesystem.readonly && zfsmanager.configuration.zfs.filesystem.readonlylockdown || pool.readonly) {
                             $("#div-" + modal.name + "-special_small_blocks-dropdown-" + modal.id + " button").prop("disabled", true);
                         }
+                        break;
+                    case "used":
+                        filesystem.used = filesystem.properties.value;
+
+                        filesystem.property = {
+                            value: "0 B"
+                        };
+
+                        if (filesystem.properties.value == "none" || filesystem.properties.value == "0" || filesystem.properties.value == "0b") {
+                            filesystem.property.value = "0 B";
+                        } else {
+                            filesystem.property.value = FnFormatBytes({ base2: true, decimals: 2, value: filesystem.properties.value });
+                        }
+
+                        $("#helpblock-" + modal.name + "-used-" + modal.id).text("Used size: " + filesystem.property.value);
                         break;
                     case "xattr":  //Default is on
                         filesystem.property = {
@@ -6319,7 +6927,7 @@ function FnFileSystemConfigurationGet(pool = { name, id, readonly: false }, file
                 $("#switch-" + modal.name + "-selinux-" + modal.id + " input").prop("disabled", true);
             }
             if (pool.readonly) {
-                $("#btn-" + modal.name + "-apply-" + filesystem.id).prop("disabled", true);
+                $("#btn-" + modal.name + "-apply-" + modal.id).prop("disabled", true);
             }
 
             FnConsole.log[1]("File Systems, Configuration, Get: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
@@ -6671,6 +7279,85 @@ function FnFileSystemConfigurationInheritedGet(pool = { name, id }, filesystem =
                 }
             });
 
+            //Quota
+            let size = {
+                quota: {
+                    max: {
+                        raw: 1099511627776000,
+                        unit: "",
+                        unitnumber: 0
+                    },
+                    slider: {
+                        valuemax: 1000
+                    },
+                    property: {
+                        value: "0 B",
+                        valueraw: "0",
+                        valueunit: "KiB"
+                    }
+                }
+            };
+
+            FnStoragePoolSizeGet({ name: pool.name, id: null })
+                .done(function (_data) {
+                    FnConsole.log[4](FnConsoleVerbose({ data: _data, message: "Storage Pools, Size, Get:" }));
+
+                    if (_data && zfsmanager.configuration.zfs.filesystem.quotarestrict) {
+                        size.quota.max.raw = parseInt(_data.replace(/\n+/g, ""));
+                    }
+                })
+                .finally(function () {
+                    size.quota.max.unitnumber = FnFormatBytes({ base2: true, decimals: 2, value: size.quota.max.raw }).replace(/ .*$/g, "");
+                    size.quota.max.unit = FnFormatBytes({ base2: true, decimals: 2, value: size.quota.max.raw }).replace(/ /g, "").replace(/^[0-9.]/, "");
+
+                    if (size.quota.max.raw <= 1024000) {
+                        $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-kib", size.quota.max.unitnumber);
+                    }
+                    if (size.quota.max.raw > 1024000) {
+                        $("#dropdown-" + modal.name + "-quota-" + modal.id + " li[value='MiB']").removeClass("hidden");
+
+                        $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-kib", size.quota.slider.valuemax);
+                        $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-mib", size.quota.max.unitnumber);
+                    }
+                    if (size.quota.max.raw > 1048576000) {
+                        $("#dropdown-" + modal.name + "-quota-" + modal.id + " li[value='GiB']").removeClass("hidden");
+
+                        $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-kib", size.quota.slider.valuemax);
+                        $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-mib", size.quota.slider.valuemax);
+                        $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-gib", size.quota.max.unitnumber);
+                    }
+                    if (size.quota.max.raw > 1073741824000) {
+                        $("#dropdown-" + modal.name + "-quota-" + modal.id + " li[value='TiB']").removeClass("hidden");
+
+                        $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-kib", size.quota.slider.valuemax);
+                        $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-mib", size.quota.slider.valuemax);
+                        $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-gib", size.quota.slider.valuemax);
+                        $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-tib", size.quota.max.unitnumber);
+                    }
+
+                    if (size.quota.property.valueunit == "KiB") {
+                        size.quota.slider.valuemax = $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-kib");
+                    }
+                    if (size.quota.property.valueunit == "MiB") {
+                        size.quota.slider.valuemax = $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-mib");
+                    }
+                    if (size.quota.property.valueunit == "GiB") {
+                        size.quota.slider.valuemax = $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-gib");
+                    }
+                    if (size.quota.property.valueunit == "TiB") {
+                        size.quota.slider.valuemax = $("#input-" + modal.name + "-quota-" + modal.id).attr("data-filesystem-quota-max-tib");
+                    }
+
+                    $("#slider-" + modal.name + "-quota-" + modal.id).data("slider").options.max = size.quota.slider.valuemax;
+                    $("#slider-" + modal.name + "-quota-" + modal.id).data("slider").options.step = (size.quota.slider.valuemax < 10 ? "0.1" : "1");
+                    $("#slider-" + modal.name + "-quota-" + modal.id).slider("setValue", size.quota.property.valueraw);
+
+                    $("#btnspan-" + modal.name + "-quota-" + modal.id).text(size.quota.property.valueunit).attr("data-field-value", size.quota.property.valueunit);
+                    $("#dropdown-" + modal.name + "-quota-" + modal.id + " li").siblings().removeClass("active");
+                    $("#dropdown-" + modal.name + "-quota-" + modal.id + " li[value='" + size.quota.property.valueunit + "']").addClass("active");
+                    $("#input-" + modal.name + "-quota-" + modal.id).attr("data-field-value", size.quota.property.value.toString().replace(/ /g, "").replace(/iB$/g, ""));
+                });
+
             FnConsole.log[1]("File Systems, Configuration, Inherited, Get: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
         })
         .fail(function (message, data) {
@@ -6761,7 +7448,7 @@ function FnFileSystemConfigurationInheritedPropertyGet(pool = { name, id }, file
         });
 }
 
-function FnFileSystemConfigure(pool = { name, id, altroot: false, readonly: false }, filesystem = { name, id, aclinherit, acltype, atime, canmount, checksum, compression, context, dedup, dnodesize, defcontext, fscontext, mountpoint, readonly, recordsize, refreservation, rootcontext, sharenfs, sharesmb, special_small_blocks, type, xattr }, samba = { restart: false }, modal = { id }) {
+function FnFileSystemConfigure(pool = { name, id, altroot: false, readonly: false }, filesystem = { name, id, aclinherit, acltype, atime, canmount, checksum, compression, context, dedup, dnodesize, defcontext, fscontext, mountpoint, quota, readonly, recordsize, refreservation, rootcontext, sharenfs, sharesmb, special_small_blocks, type, xattr }, samba = { restart: false }, modal = { id }) {
     filesystem.properties = {
         inherit: [],
         new: []
@@ -6831,6 +7518,9 @@ function FnFileSystemConfigure(pool = { name, id, altroot: false, readonly: fals
     if (filesystem.mountpoint) {
         filesystem.properties.new.push(`mountpoint="` + filesystem.mountpoint + `"`);
     }
+    if (filesystem.quota) {
+        filesystem.properties.new.push(`quota="` + filesystem.quota + `"`);
+    }
     if (filesystem.readonly) {
         filesystem.properties.new.push("readonly=" + filesystem.readonly);
     }
@@ -6898,7 +7588,7 @@ function FnFileSystemConfigureCommand(pool = { name, id, altroot: false }, files
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "File System successfully configured", message: filesystem.name }, { name: "filesystem-configure", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "File System successfully configured", description: filesystem.name, breakword: false }, { name: "filesystem-configure", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("File Systems, Configure: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
 
@@ -6934,17 +7624,23 @@ function FnFileSystemConfigureCommand(pool = { name, id, altroot: false }, files
                 $("#validationwrapper-storagepool-filesystem-configure-refreservation-" + filesystem.id).addClass("has-error");
                 $("#helpblock-storagepool-filesystem-configure-refreservation-" + filesystem.id).addClass("has-error").removeClass("hidden").text("Refreservation can not be greater than available size.");
                 $("#input-storagepool-filesystem-configure-refreservation-" + filesystem.id).focus();
+            } else if (/size is less than current used or reserved space/gi.test(data)) {
+                modal.hide = false;
+
+                $("#validationwrapper-storagepool-filesystem-configure-quota-" + filesystem.id).addClass("has-error");
+                $("#helpblock-storagepool-filesystem-configure-quota-" + filesystem.id).addClass("has-error").removeClass("hidden").text("Quota can not be less than used size.");
+                $("#input-storagepool-filesystem-configure-quota-" + filesystem.id).focus();
             } else if (/property may be set/gi.test(data)) {
                 filesystem.configured = true;
 
-                FnDisplayNotification({ status: "warning", title: "File system configured with errors", message: filesystem.name }, { name: "filesystem-configure", id: filesystem.id });
+                FnDisplayAlert({ status: "warning", title: "File system configured with errors", description: filesystem.name, breakword: false }, { name: "filesystem-configure", id: filesystem.id, timeout: 4 });
 
                 FnConsole.warn("File Systems, Configure: Warning, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
             }
 
             if (!filesystem.configured) {
                 if (modal.hide) {
-                    FnDisplayNotification({ status: "danger", title: "File System could not be configured", message: filesystem.name }, { name: "filesystem-configure", id: filesystem.id });
+                    FnDisplayAlert({ status: "danger", title: "File System could not be configured", description: filesystem.name, breakword: false }, { name: "filesystem-configure", id: filesystem.id, timeout: 4 });
                 }
 
                 FnConsole.warn("File Systems, Configure: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
@@ -6991,9 +7687,9 @@ function FnFileSystemConfigureInheritance(pool = { name, id }, filesystem = { na
 
                         if (_index == (filesystem.properties.inherit.length - 1)) {
                             if (filesystem.properties.errorcount == 0) {
-                                FnDisplayNotification({ status: "success", title: "File System inheritance successfully configured", message: filesystem.name }, { name: "filesystem-configure-inheritance", id: filesystem.id });
+                                FnDisplayAlert({ status: "success", title: "File System inheritance successfully configured", description: filesystem.name, breakword: false }, { name: "filesystem-configure-inheritance", id: filesystem.id, timeout: 4 });
                             } else {
-                                FnDisplayNotification({ status: "danger", title: "File System inheritance could not be configured", message: filesystem.name }, { name: "filesystem-configure-inheritance", id: filesystem.id });
+                                FnDisplayAlert({ status: "danger", title: "File System inheritance could not be configured", description: filesystem.name, breakword: false }, { name: "filesystem-configure-inheritance", id: filesystem.id, timeout: 4 });
                             }
 
                             process.promise.resolve();
@@ -7005,7 +7701,7 @@ function FnFileSystemConfigureInheritance(pool = { name, id }, filesystem = { na
                         FnConsole.warn("File Systems, Configure, Inheritance: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
 
                         if (_index == (filesystem.properties.inherit.length - 1)) {
-                            FnDisplayNotification({ status: "danger", title: "File System inheritance could not be configured", message: filesystem.name }, { name: "filesystem-configure-inheritance", id: filesystem.id });
+                            FnDisplayAlert({ status: "danger", title: "File System inheritance could not be configured", description: filesystem.name, breakword: false }, { name: "filesystem-configure-inheritance", id: filesystem.id, timeout: 4 });
 
                             process.promise.resolve();
                         }
@@ -7019,12 +7715,15 @@ function FnFileSystemConfigureInheritance(pool = { name, id }, filesystem = { na
     return process.promise.promise();
 }
 
-function FnFileSystemCreate(pool = { name, id, altroot: false }, filesystem = { name, id, atime, casesensitivity, cipher, compression, dedup, dnodesize, encryption, passphrase, readonly, recordsize, selinux, sharenfs, sharesmb, special_small_blocks, xattr }) {
+function FnFileSystemCreate(pool = { name, id, altroot: false }, filesystem = { name, id, atime, casesensitivity, cipher, compression, dedup, dnodesize, encryption, passphrase, quota, readonly, recordsize, selinux, sharenfs, sharesmb, special_small_blocks, xattr }) {
     let process = {
         command: [],
         options: `-o normalization=formD -o sharenfs="` + filesystem.sharenfs + `" -o sharesmb=` + filesystem.sharesmb + ` -o utf8only=on`
     };
 
+    if (filesystem.quota) {
+        process.options += " -o quota=" + filesystem.quota;
+    }
     if (filesystem.readonly) {
         process.options += " -o readonly=" + filesystem.readonly;
     }
@@ -7087,7 +7786,7 @@ function FnFileSystemCreate(pool = { name, id, altroot: false }, filesystem = { 
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "File System successfully created", message: filesystem.name }, { name: "filesystem-create", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "File System successfully created", description: filesystem.name, breakword: false }, { name: "filesystem-create", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("File Systems, Create: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
 
@@ -7138,7 +7837,7 @@ function FnFileSystemCreateFail(pool = { name, id, altroot: false }, filesystem 
     } else if (/filesystem successfully created/gi.test(process.data)) {
         filesystem.created = true;
 
-        FnDisplayNotification({ status: "warning", title: "File system created with errors", message: filesystem.name }, { name: "filesystem-create", id: filesystem.id });
+        FnDisplayAlert({ status: "warning", title: "File system created with errors", description: filesystem.name, breakword: false }, { name: "filesystem-create", id: filesystem.id, timeout: 4 });
 
         FnConsole.warn("File Systems, Create: Warning, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (process.data ? process.data : process.message));
 
@@ -7161,7 +7860,7 @@ function FnFileSystemCreateFail(pool = { name, id, altroot: false }, filesystem 
 
     if (modal.hide) {
         if (!filesystem.created) {
-            FnDisplayNotification({ status: "danger", title: "File System could not be created", message: filesystem.name }, { name: "filesystem-create", id: filesystem.id });
+            FnDisplayAlert({ status: "danger", title: "File System could not be created", description: filesystem.name, breakword: false }, { name: "filesystem-create", id: filesystem.id, timeout: 4 });
         }
 
         $("#modal-storagepool-filesystems-create-" + pool.id).modal("hide");
@@ -7175,8 +7874,10 @@ function FnFileSystemCreateFail(pool = { name, id, altroot: false }, filesystem 
 function FnFileSystemDestroy(pool = { name, id, altroot: false, readonly: false }, filesystem = { name, id, force: false, recursive: false, recursiveall: false, sharesmb: false, type }, samba = { restart: false }) {
     if (samba.restart) {
         FnSambaStop()
-            .done(function () {
+            .finally(function () {
                 if ((filesystem.recursive || filesystem.recursiveall) && zfsmanager.configuration.samba.manage) {
+                    $("#spinner-storagepool-filesystem-destroy-" + filesystem.id + " span").text("Retrieving Samba shares...");
+
                     FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: filesystem.name, clones: [] })
                         .done(function (data) {
                             FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Samba, Shares, Get:" }));
@@ -7204,6 +7905,10 @@ function FnFileSystemDestroy(pool = { name, id, altroot: false, readonly: false 
                             } else {
                                 FnFileSystemDestroyCommand({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, force: filesystem.force, recursive: filesystem.recursive, recursiveall: filesystem.recursiveall }, { refresh: true })
                             }
+                        })
+                        .fail(function (message, data) {
+                            FnFileSystemDestroyFail({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id }, { data: data, message: message }, { refresh: true });
+                            FnSambaStart();
                         });
                 } else {
                     $("#spinner-storagepool-filesystem-destroy-" + filesystem.id + " span").text("Destroying " + filesystem.type.toLowerCase() + "...");
@@ -7234,6 +7939,8 @@ function FnFileSystemDestroy(pool = { name, id, altroot: false, readonly: false 
             });
     } else {
         if ((filesystem.recursive || filesystem.recursiveall) && zfsmanager.configuration.samba.manage) {
+            $("#spinner-storagepool-filesystem-destroy-" + filesystem.id + " span").text("Retrieving Samba shares...");
+
             FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: filesystem.name, clones: [] })
                 .done(function (data) {
                     FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Samba, Shares, Get:" }));
@@ -7261,6 +7968,9 @@ function FnFileSystemDestroy(pool = { name, id, altroot: false, readonly: false 
                     } else {
                         FnFileSystemDestroyCommand({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, force: filesystem.force, recursive: filesystem.recursive, recursiveall: filesystem.recursiveall }, { refresh: true })
                     }
+                })
+                .fail(function (message, data) {
+                    FnFileSystemDestroyFail({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id }, { data: data, message: message }, { refresh: true });
                 });
         } else {
             $("#spinner-storagepool-filesystem-destroy-" + filesystem.id + " span").text("Destroying " + filesystem.type.toLowerCase() + "...");
@@ -7306,14 +8016,12 @@ function FnFileSystemDestroyCommand(pool = { name, id }, filesystem = { name, id
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "File System successfully destroyed", message: filesystem.name }, { name: "filesystem-destroy", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "File System successfully destroyed", description: filesystem.name, breakword: false }, { name: "filesystem-destroy", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("File Systems, Destroy: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "File System could not be destroyed", message: filesystem.name }, { name: "filesystem-destroy", id: filesystem.id });
-
-            FnConsole.warn("File Systems, Destroy: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
+            FnFileSystemDestroyFail({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id }, { data: data, message: message }, { refresh: false });
 
             display.refresh = true;
         })
@@ -7328,6 +8036,20 @@ function FnFileSystemDestroyCommand(pool = { name, id }, filesystem = { name, id
         });
 }
 
+function FnFileSystemDestroyFail(pool = { name, id }, filesystem = { name, id }, process = { data, message }, display = { refresh: true }) {
+    FnDisplayAlert({ status: "danger", title: "File System could not be destroyed", description: filesystem.name, breakword: false }, { name: "filesystem-destroy", id: filesystem.id, timeout: 4 });
+
+    FnConsole.warn("File Systems, Destroy: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (process.data ? process.data : process.message));
+
+    if (display.refresh) {
+        $("#modal-storagepool-filesystem-destroy-" + filesystem.id).modal("hide");
+
+        setTimeout(function () {
+            FnStoragePoolRefresh({ name: pool.name, id: pool.id }, { storagepool: true, filesystems: true, snapshots: true, status: false });
+        }, 200);
+    }
+}
+
 function FnFileSystemLock(pool = { name, id }, filesystem = { name, id, type }, display = { refresh: true }) {
     let process = {
         command: ["/sbin/zfs", "unload-key", filesystem.name]
@@ -7340,12 +8062,12 @@ function FnFileSystemLock(pool = { name, id }, filesystem = { name, id, type }, 
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "File System successfully locked", message: filesystem.name }, { name: "filesystem-lock", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "File System successfully locked", description: filesystem.name, breakword: false }, { name: "filesystem-lock", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("File Systems, Lock: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "File System could not be locked", message: filesystem.name }, { name: "filesystem-lock", id: filesystem.id });
+            FnDisplayAlert({ status: "danger", title: "File System could not be locked", description: filesystem.name, breakword: false }, { name: "filesystem-lock", id: filesystem.id, timeout: 4 });
 
             FnConsole.warn("File Systems, Lock: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
         })
@@ -7376,7 +8098,7 @@ function FnFileSystemMount(pool = { name, id, altroot: false, readonly: false },
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "File System successfully mounted", message: filesystem.name }, { name: "filesystem-mount", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "File System successfully mounted", description: filesystem.name, breakword: false }, { name: "filesystem-mount", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("File Systems, Mount: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
 
@@ -7392,9 +8114,9 @@ function FnFileSystemMount(pool = { name, id, altroot: false, readonly: false },
         })
         .fail(function (message, data) {
             if (/filesystem already mounted/gi.test(data)) {
-                FnDisplayNotification({ status: "warning", title: "File System was already mounted", message: filesystem.name }, { name: "filesystem-mount", id: filesystem.id });
+                FnDisplayAlert({ status: "warning", title: "File System was already mounted", description: filesystem.name, breakword: false }, { name: "filesystem-mount", id: filesystem.id, timeout: 4 });
             } else {
-                FnDisplayNotification({ status: "danger", title: "File System could not be mounted", message: filesystem.name }, { name: "filesystem-mount", id: filesystem.id });
+                FnDisplayAlert({ status: "danger", title: "File System could not be mounted", description: filesystem.name, breakword: false }, { name: "filesystem-mount", id: filesystem.id, timeout: 4 });
             }
 
             FnConsole.warn("File Systems, Mount: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
@@ -7441,12 +8163,12 @@ function FnFileSystemPromote(pool = { name, id }, filesystem = { name, id, type 
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "File System successfully promoted", message: filesystem.name }, { name: "filesystem-promote", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "File System successfully promoted", description: filesystem.name, breakword: false }, { name: "filesystem-promote", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("File Systems, Promote: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "File System could not be promoted", message: filesystem.name }, { name: "filesystem-promote", id: filesystem.id });
+            FnDisplayAlert({ status: "danger", title: "File System could not be promoted", description: filesystem.name, breakword: false }, { name: "filesystem-promote", id: filesystem.id, timeout: 4 });
 
             FnConsole.warn("File Systems, Promote: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
         })
@@ -7462,8 +8184,10 @@ function FnFileSystemPromote(pool = { name, id }, filesystem = { name, id, type 
 function FnFileSystemRename(pool = { name, id, altroot: false }, filesystem = { name, id, createnonexistparents: false, force: false, namenew, parent, sharesmb: false, type }, samba = { restart: false }) {
     if (samba.restart) {
         FnSambaStop()
-            .done(function () {
+            .finally(function () {
                 if (zfsmanager.configuration.samba.manage) {
+                    $("#spinner-storagepool-filesystem-rename-" + filesystem.id + " span").text("Retrieving Samba shares...");
+
                     FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: filesystem.name, clones: [] })
                         .done(function (data) {
                             FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Samba, Shares, Get:" }));
@@ -7528,6 +8252,10 @@ function FnFileSystemRename(pool = { name, id, altroot: false }, filesystem = { 
                                         FnSambaStart();
                                     });
                             }
+                        })
+                        .fail(function (message, data) {
+                            FnFileSystemRenameFail({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, createnonexistparents: filesystem.createnonexistparents, parent: filesystem.parent }, { data: data, message: message }, { refresh: true });
+                            FnSambaStart();
                         });
                 } else {
                     FnFileSystemRenameCommand({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, createnonexistparents: filesystem.createnonexistparents, force: filesystem.force, namenew: filesystem.namenew, parent: filesystem.parent }, { refresh: true })
@@ -7538,6 +8266,8 @@ function FnFileSystemRename(pool = { name, id, altroot: false }, filesystem = { 
             });
     } else {
         if (zfsmanager.configuration.samba.manage) {
+            $("#spinner-storagepool-filesystem-rename-" + filesystem.id + " span").text("Retrieving Samba shares...");
+
             FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: filesystem.name, clones: [] })
                 .done(function (data) {
                     FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Samba, Shares, Get:" }));
@@ -7594,6 +8324,9 @@ function FnFileSystemRename(pool = { name, id, altroot: false }, filesystem = { 
                                 }
                             });
                     }
+                })
+                .fail(function (message, data) {
+                    FnFileSystemRenameFail({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, createnonexistparents: filesystem.createnonexistparents, parent: filesystem.parent }, { data: data, message: message }, { refresh: true });
                 });
         } else {
             FnFileSystemRenameCommand({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, createnonexistparents: filesystem.createnonexistparents, force: filesystem.force, namenew: filesystem.namenew, parent: filesystem.parent }, { refresh: true });
@@ -7625,7 +8358,7 @@ function FnFileSystemRenameCommand(pool = { name, id }, filesystem = { name, id,
                 return;
             }
 
-            FnDisplayNotification({ status: "success", title: "File System successfully renamed", message: filesystem.name }, { name: "filesystem-rename", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "File System successfully renamed", description: filesystem.name, breakword: false }, { name: "filesystem-rename", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("File Systems, Rename: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
 
@@ -7670,7 +8403,7 @@ function FnFileSystemRenameFail(pool = { name, id }, filesystem = { name, id, cr
     FnConsole.warn("File Systems, Rename: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (process.data ? process.data : process.message));
 
     if (modal.hide) {
-        FnDisplayNotification({ status: "danger", title: "File System could not be renamed", message: filesystem.name }, { name: "filesystem-rename", id: filesystem.id });
+        FnDisplayAlert({ status: "danger", title: "File System could not be renamed", description: filesystem.name, breakword: false }, { name: "filesystem-rename", id: filesystem.id, timeout: 4 });
 
         $("#modal-storagepool-filesystem-rename-" + filesystem.id).modal("hide");
 
@@ -7862,11 +8595,11 @@ function FnFileSystemUnlock(pool = { name, id, altroot: false, readonly: false }
             FnConsole.log[4](FnConsoleVerbose({ data: data, message: "File Systems, Unlock:" }));
 
             if (/error|Incorrect key/i.test(data)) {
-                FnFileSystemUnlockFail({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, type: filesystem.type }, { refresh: display.refresh }, { name: modal.name, id: modal.id }, { data: data, message: message });
+                FnFileSystemUnlockFail({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, type: filesystem.type }, { name: modal.name, id: modal.id }, { refresh: display.refresh }, { data: data, message: message });
                 return;
             }
 
-            FnDisplayNotification({ status: "success", title: "File System successfully unlocked", message: filesystem.name }, { name: "filesystem-unlock", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "File System successfully unlocked", description: filesystem.name, breakword: false }, { name: "filesystem-unlock", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("File Systems, Unlock: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
 
@@ -7895,30 +8628,30 @@ function FnFileSystemUnlock(pool = { name, id, altroot: false, readonly: false }
             if (/Key already loaded/i.test(data)) {
                 FnFileSystemUnlockWarn({ name: pool.name, id: pool.id, altroot: pool.altroot, readonly: pool.readonly }, { name: filesystem.name, id: filesystem.id, mount: filesystem.mount, overlay: filesystem.overlay, type: filesystem.type }, { enable: samba.enable }, { name: modal.name, id: modal.id }, { refresh: display.refresh }, { data: data, message: message });
             } else {
-                FnFileSystemUnlockFail({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, type: filesystem.type }, { refresh: display.refresh }, { name: modal.name, id: modal.id }, { data: data, message: message });
+                FnFileSystemUnlockFail({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, type: filesystem.type }, { name: modal.name, id: modal.id }, { refresh: display.refresh }, { data: data, message: message });
             }
         });
 }
 
-function FnFileSystemUnlockFail(pool = { name, id }, filesystem = { name, id, type }, display = { refresh: true }, modal = { name, id }, process = { data, message }) {
+function FnFileSystemUnlockFail(pool = { name, id }, filesystem = { name, id, type }, modal = { name, id }, display = { refresh: true }, process = { data, message }) {
     modal.hide = true;
 
-        if (/Incorrect key provided/gi.test(process.data)) {
-            modal.hide = false;
+    if (/Incorrect key provided/gi.test(process.data)) {
+        modal.hide = false;
 
-            $("#validationwrapper-" + modal.name + "-passphrase" + modal.id).addClass("has-error");
-            $("#helpblock-" + modal.name + "-passphrase" + modal.id).addClass("has-error").removeClass("hidden").text("Passphrase is incorrect.");
-            $("#input-" + modal.name + "-passphrase" + modal.id).focus();
-        }
+        $("#validationwrapper-" + modal.name + "-passphrase" + modal.id).addClass("has-error");
+        $("#helpblock-" + modal.name + "-passphrase" + modal.id).addClass("has-error").removeClass("hidden").text("Passphrase is incorrect.");
+        $("#input-" + modal.name + "-passphrase" + modal.id).focus();
+    }
 
-        if (!modal.hide) {
-            $("#spinner-" + modal.name + modal.id).addClass("hidden");
-            $("#spinner-" + modal.name + modal.id + " span").text("");
-            $("#btn-" + modal.name + "-apply" + modal.id).prop("disabled", false);
+    if (!modal.hide && display.refresh) {
+        $("#spinner-" + modal.name + modal.id).addClass("hidden");
+        $("#spinner-" + modal.name + modal.id + " span").text("");
+        $("#btn-" + modal.name + "-apply" + modal.id).prop("disabled", false);
     }
 
     if (modal.hide || !display.refresh) {
-        FnDisplayNotification({ status: "danger", title: "File System could not be unlocked", message: filesystem.name }, { name: "filesystem-unlock", id: filesystem.id });
+        FnDisplayAlert({ status: "danger", title: "File System could not be unlocked", description: filesystem.name, breakword: false }, { name: "filesystem-unlock", id: filesystem.id, timeout: 4 });
     }
 
     if (modal.hide) {
@@ -7935,7 +8668,7 @@ function FnFileSystemUnlockFail(pool = { name, id }, filesystem = { name, id, ty
 }
 
 function FnFileSystemUnlockWarn(pool = { name, id, altroot: false, readonly: false }, filesystem = { name, id, mount: true, overlay: true, type }, samba = { enable: false }, modal = { name, id }, display = { refresh: true }, process = { data, message }) {
-    FnDisplayNotification({ status: "warning", title: "File System was already unlocked", message: filesystem.name }, { name: "filesystem-unlock", id: filesystem.id });
+    FnDisplayAlert({ status: "warning", title: "File System was already unlocked", description: filesystem.name, breakword: false }, { name: "filesystem-unlock", id: filesystem.id, timeout: 4 });
 
     FnConsole.warn("File Systems, Unlock: Warning, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (process.data ? process.data : process.message));
 
@@ -7964,7 +8697,7 @@ function FnFileSystemUnlockWarn(pool = { name, id, altroot: false, readonly: fal
 function FnFileSystemUnmount(pool = { name, id, altroot: false, readonly: false }, filesystem = { name, id, force: false, lock: false, type }, samba = { disable: false, restart: false }) {
     if (samba.restart) {
         FnSambaStop()
-            .done(function () {
+            .finally(function () {
                 $("#spinner-storagepool-filesystem-unmount-" + filesystem.id + " span").text("Unmounting " + filesystem.type.toLowerCase() + "...");
 
                 FnFileSystemUnmountCommand({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, force: filesystem.force, lock: filesystem.lock }, { refresh: ((filesystem.lock || samba.disable) ? false : true) })
@@ -8083,7 +8816,7 @@ function FnFileSystemUnmountCommand(pool = { name, id }, filesystem = { name, id
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "File System successfully unmounted", message: filesystem.name }, { name: "filesystem-unmount", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "File System successfully unmounted", description: filesystem.name, breakword: false }, { name: "filesystem-unmount", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("File Systems, Unmount: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
 
@@ -8096,7 +8829,7 @@ function FnFileSystemUnmountCommand(pool = { name, id }, filesystem = { name, id
             }
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "File System could not be unmounted", message: filesystem.name }, { name: "filesystem-unmount", id: filesystem.id });
+            FnDisplayAlert({ status: "danger", title: "File System could not be unmounted", description: filesystem.name, breakword: false }, { name: "filesystem-unmount", id: filesystem.id, timeout: 4 });
 
             FnConsole.warn("File Systems, Unmount: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
 
@@ -8161,7 +8894,7 @@ function FnSnapshotsGet(pool = { name, id }) {
                 $("#btn-storagepool-snapshots-create-" + pool.id).prop("disabled", false);
                 $("#btn-storagepool-snapshots-refresh-" + pool.id).prop("disabled", false);
             }
-            
+
             FnStoragePoolSpinnerHide({ name: pool.name, id: pool.id });
             FnCockpitElementsUpdate();
         });
@@ -8430,7 +9163,7 @@ function FnSnapshotChildSnapshotsGet(pool = { name, id }, snapshot = { name, id,
             if (snapshots.id.length > 0) {
                 snapshots.id.forEach((_value, _index) => {
                     if (_value != snapshot.name) {
-                        //Recursive all will delete child file system snapshots with same name only. If clones are also found, all clone snapshots will be deleted 
+                        //Recursive all will delete child file system snapshots with same name only. If clones are also found, all clone snapshots will be deleted
                         if (new RegExp("^" + snapshot.name.replace(/^(.*)\@.*$/, "$1") + "/.*@" + snapshot.name.replace(/^.*\@(.*)$/, "$1") + "$").test(_value)) { //Child file system snapshots with same name
                             if (!snapshot.exclude) {
                                 snapshots.count.snapshots++;
@@ -8489,7 +9222,7 @@ function FnSnapshotClone(pool = { name, id, altroot: false }, snapshot = { name,
                 return;
             }
 
-            FnDisplayNotification({ status: "success", title: "Snapshot successfully cloned", message: snapshot.name }, { name: "snapshot-clone", id: snapshot.id });
+            FnDisplayAlert({ status: "success", title: "Snapshot successfully cloned", description: snapshot.name, breakword: false }, { name: "snapshot-clone", id: snapshot.id, timeout: 4 });
 
             FnConsole.log[1]("Snapshots, Clone: Success, Pool: " + pool.name + ", Snapshot: " + snapshot.name);
 
@@ -8523,7 +9256,7 @@ function FnSnapshotCloneFail(pool = { name, id }, snapshot = { name, id }, proce
     };
 
     if (/filesystem successfully created/gi.test(process.data)) {
-        FnDisplayNotification({ status: "warning", title: "Snapshot cloned with errors", message: snapshot.name }, { name: "snapshot-clone", id: snapshot.id });
+        FnDisplayAlert({ status: "warning", title: "Snapshot cloned with errors", description: snapshot.name, breakword: false }, { name: "snapshot-clone", id: snapshot.id, timeout: 4 });
 
         FnConsole.warn("Snapshots, Clone: Warning, Pool: " + pool.name + ", Snapshot: " + snapshot.name + ", Message: " + (process.data ? process.data : process.message));
     } else {
@@ -8542,7 +9275,7 @@ function FnSnapshotCloneFail(pool = { name, id }, snapshot = { name, id }, proce
         }
 
         if (modal.hide) {
-            FnDisplayNotification({ status: "danger", title: "Snapshot could not be cloned", message: snapshot.name }, { name: "snapshot-clone", id: snapshot.id });
+            FnDisplayAlert({ status: "danger", title: "Snapshot could not be cloned", description: snapshot.name, breakword: false }, { name: "snapshot-clone", id: snapshot.id, timeout: 4 });
         }
 
         FnConsole.warn("Snapshots, Clone: Failed, Pool: " + pool.name + ", Snapshot: " + snapshot.name + ", Message: " + (process.data ? process.data : process.message));
@@ -8577,11 +9310,11 @@ function FnSnapshotCreate(pool = { name, id }, snapshot = { name, id, recursive:
     FnConsole.log[2]("Snapshots, Create: In Progress, Pool: " + pool.name + ", Snapshot: " + snapshot.name);
     FnConsole.log[3](FnConsoleCommand({ command: process.command }));
 
-    $("#spinner-" + modal.name + "-" + modal.id + " span").text("Creating snapshot...");
+    $("#spinner-" + modal.name + "-" + modal.id + " span").text("Creating snapshot" + (snapshot.recursive ? "s" : "") + "...");
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Snapshot successfully created", message: snapshot.name }, { name: "snapshot-create", id: snapshot.id });
+            FnDisplayAlert({ status: "success", title: "Snapshot successfully created", description: snapshot.name, breakword: false }, { name: "snapshot-create", id: snapshot.id, timeout: 4 });
 
             FnConsole.log[1]("Snapshots, Create: Success, Pool: " + pool.name + ", Snapshot: " + snapshot.name);
         })
@@ -8601,7 +9334,7 @@ function FnSnapshotCreate(pool = { name, id }, snapshot = { name, id, recursive:
             }
 
             if (modal.hide) {
-                FnDisplayNotification({ status: "danger", title: "Snapshot could not be created", message: snapshot.name }, { name: "snapshot-create", id: snapshot.id });
+                FnDisplayAlert({ status: "danger", title: "Snapshot could not be created", description: snapshot.name, breakword: false }, { name: "snapshot-create", id: snapshot.id, timeout: 4 });
             }
 
             FnConsole.warn("Snapshots, Create: Failed, Pool: " + pool.name + ", Snapshot: " + snapshot.name + ", Message: " + (data ? data : message));
@@ -8628,7 +9361,7 @@ function FnSnapshotCreateDateGet(pool = { name, id }, snapshot = { name, id, rec
 
     FnConsole.log[3](FnConsoleCommand({ command: process.command }));
 
-    $("#spinner-" + modal.name + "-" + modal.id + " span").text("Creating snapshot...");
+    $("#spinner-" + modal.name + "-" + modal.id + " span").text("Creating snapshot" + (snapshot.recursive ? "s" : "") + "...");
 
     return cockpit.spawn(process.command, { err: "out" })
         .done(function (data) {
@@ -8652,8 +9385,10 @@ function FnSnapshotCreateDateGet(pool = { name, id }, snapshot = { name, id, rec
 function FnSnapshotDestroy(pool = { name, id, altroot: false, readonly: false }, snapshot = { name, id, clones: [], recursive: false, recursiveall: false }, samba = { restart: false }) {
     if (samba.restart) {
         FnSambaStop()
-            .done(function () {
+            .finally(function () {
                 if (snapshot.recursiveall && snapshot.clones.length > 0 && zfsmanager.configuration.samba.manage) {
+                    $("#spinner-storagepool-snapshot-destroy-" + snapshot.id + " span").text("Retrieving Samba shares...");
+
                     FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: null, clones: snapshot.clones })
                         .done(function (data) {
                             FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Samba, Shares, Get:" }));
@@ -8686,6 +9421,10 @@ function FnSnapshotDestroy(pool = { name, id, altroot: false, readonly: false },
                                         FnSambaStart();
                                     });
                             }
+                        })
+                        .fail(function (message, data) {
+                            FnSnapshotDestroyFail({ name: pool.name, id: pool.id }, { name: snapshot.name, id: snapshot.id }, { data: data, message: message }, { refresh: true });
+                            FnSambaStart();
                         });
                 } else {
                     $("#spinner-storagepool-snapshot-destroy-" + snapshot.id + " span").text("Destroying snapshot...");
@@ -8698,6 +9437,8 @@ function FnSnapshotDestroy(pool = { name, id, altroot: false, readonly: false },
             });
     } else {
         if (snapshot.recursiveall && snapshot.clones.length > 0 && zfsmanager.configuration.samba.manage) {
+            $("#spinner-storagepool-snapshot-destroy-" + snapshot.id + " span").text("Retrieving Samba shares...");
+
             FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: null, clones: snapshot.clones })
                 .done(function (data) {
                     FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Samba, Shares, Get:" }));
@@ -8727,6 +9468,9 @@ function FnSnapshotDestroy(pool = { name, id, altroot: false, readonly: false },
 
                         FnSnapshotDestroyCommand({ name: pool.name, id: pool.id }, { name: snapshot.name, id: snapshot.id, recursive: snapshot.recursive, recursiveall: snapshot.recursiveall }, { refresh: true });
                     }
+                })
+                .fail(function (message, data) {
+                    FnSnapshotDestroyFail({ name: pool.name, id: pool.id }, { name: snapshot.name, id: snapshot.id }, { data: data, message: message }, { refresh: true });
                 });
         } else {
             $("#spinner-storagepool-snapshot-destroy-" + snapshot.id + " span").text("Destroying snapshot...");
@@ -8753,14 +9497,12 @@ function FnSnapshotDestroyCommand(pool = { name, id }, snapshot = { name, id, re
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Snapshot successfully destroyed", message: snapshot.name }, { name: "snapshot-destroy", id: snapshot.id });
+            FnDisplayAlert({ status: "success", title: "Snapshot successfully destroyed", description: snapshot.name, breakword: false }, { name: "snapshot-destroy", id: snapshot.id, timeout: 4 });
 
             FnConsole.log[1]("Snapshots, Destroy: Success, Pool: " + pool.name + ", Snapshot: " + snapshot.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Snapshot could not be destroyed", message: snapshot.name }, { name: "snapshot-destroy", id: snapshot.id });
-
-            FnConsole.warn("Snapshots, Destroy: Failed, Pool: " + pool.name + ", Snapshot: " + snapshot.name + ", Message: " + (data ? data : message));
+            FnSnapshotDestroyFail({ name: pool.name, id: pool.id }, { name: snapshot.name, id: snapshot.id }, { data: data, message: message }, { refresh: false });
 
             display.refresh = true;
         })
@@ -8773,6 +9515,20 @@ function FnSnapshotDestroyCommand(pool = { name, id }, snapshot = { name, id, re
                 }, 200);
             }
         });
+}
+
+function FnSnapshotDestroyFail(pool = { name, id }, snapshot = { name, id }, process = { data, message }, display = { refresh: true }) {
+    FnDisplayAlert({ status: "danger", title: "Snapshot could not be destroyed", description: snapshot.name, breakword: false }, { name: "snapshot-destroy", id: snapshot.id, timeout: 4 });
+
+    FnConsole.warn("Snapshots, Destroy: Failed, Pool: " + pool.name + ", Snapshot: " + snapshot.name + ", Message: " + (process.data ? process.data : process.message));
+
+    if (display.refresh) {
+        $("#modal-storagepool-snapshot-destroy-" + snapshot.id).modal("hide");
+
+        setTimeout(function () {
+            FnStoragePoolRefresh({ name: pool.name, id: pool.id }, { storagepool: true, filesystems: true, snapshots: true, status: false });
+        }, 200);
+    }
 }
 
 function FnSnapshotRename(pool = { name, id }, snapshot = { name, id, namenew, recursive: false }) {
@@ -8794,7 +9550,7 @@ function FnSnapshotRename(pool = { name, id }, snapshot = { name, id, namenew, r
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Snapshot successfully renamed", message: snapshot.name }, { name: "snapshot-rename", id: snapshot.id });
+            FnDisplayAlert({ status: "success", title: "Snapshot successfully renamed", description: snapshot.name, breakword: false }, { name: "snapshot-rename", id: snapshot.id, timeout: 4 });
 
             FnConsole.log[1]("Snapshots, Rename: Success, Pool: " + pool.name + ", Snapshot: " + snapshot.name);
         })
@@ -8816,7 +9572,7 @@ function FnSnapshotRename(pool = { name, id }, snapshot = { name, id, namenew, r
             FnConsole.warn("Snapshots, Rename: Failed, Pool: " + pool.name + ", Snapshot: " + snapshot.name + ", Message: " + (data ? data : message));
 
             if (modal.hide) {
-                FnDisplayNotification({ status: "danger", title: "Snapshot could not be renamed", message: snapshot.name }, { name: "snapshot-rename", id: snapshot.id });
+                FnDisplayAlert({ status: "danger", title: "Snapshot could not be renamed", description: snapshot.name, breakword: false }, { name: "snapshot-rename", id: snapshot.id, timeout: 4 });
             }
         })
         .finally(function () {
@@ -8833,7 +9589,7 @@ function FnSnapshotRename(pool = { name, id }, snapshot = { name, id, namenew, r
 function FnSnapshotRollBack(pool = { name, id, altroot: false, readonly: false }, snapshot = { name, id, creation, force: false, recursive: false, recursiveall: false }, samba = { restart: false }) {
     if (samba.restart) {
         FnSambaStop()
-            .done(function () {
+            .finally(function () {
                 if (snapshot.recursiveall && zfsmanager.configuration.samba.manage) {
                     FnSnapshotRollBackSnapshotsGet({ name: pool.name, id: pool.id }, { name: snapshot.name, id: snapshot.id, creation: snapshot.creation }, { name: null, id: null })
                         .done(function (data) {
@@ -8861,6 +9617,8 @@ function FnSnapshotRollBack(pool = { name, id, altroot: false, readonly: false }
                             }
 
                             if (snapshots.clones.length > 0) {
+                                $("#spinner-storagepool-snapshot-rollback-" + snapshot.id + " span").text("Retrieving Samba shares...");
+
                                 FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: null, clones: snapshots.clones })
                                     .done(function (_data) {
                                         FnConsole.log[4](FnConsoleVerbose({ data: _data, message: "Samba, Shares, Get:" }));
@@ -8893,6 +9651,10 @@ function FnSnapshotRollBack(pool = { name, id, altroot: false, readonly: false }
                                                     FnSambaStart();
                                                 });
                                         }
+                                    })
+                                    .fail(function (_message, _data) {
+                                        FnSnapshotRollBackCommandFail({ name: pool.name, id: pool.id }, { name: snapshot.name, id: snapshot.id }, { data: _data, message: _message }, { refresh: true });
+                                        FnSambaStart();
                                     });
                             } else {
                                 $("#spinner-storagepool-snapshot-rollback-" + snapshot.id + " span").text("Rolling back snapshot...");
@@ -8940,6 +9702,8 @@ function FnSnapshotRollBack(pool = { name, id, altroot: false, readonly: false }
                     }
 
                     if (snapshots.clones.length > 0) {
+                        $("#spinner-storagepool-snapshot-rollback-" + snapshot.id + " span").text("Retrieving Samba shares...");
+
                         FnSambaSharesGet({ name: pool.name, id: pool.id }, { name: null, clones: snapshots.clones })
                             .done(function (_data) {
                                 FnConsole.log[4](FnConsoleVerbose({ data: _data, message: "Samba, Shares, Get:" }));
@@ -8969,8 +9733,10 @@ function FnSnapshotRollBack(pool = { name, id, altroot: false, readonly: false }
 
                                     FnSnapshotRollBackCommand({ name: pool.name, id: pool.id }, { name: snapshot.name, id: snapshot.id, force: snapshot.force, recursive: snapshot.recursive, recursiveall: snapshot.recursiveall }, { refresh: true });
                                 }
+                            })
+                            .fail(function (_message, _data) {
+                                FnSnapshotRollBackCommandFail({ name: pool.name, id: pool.id }, { name: snapshot.name, id: snapshot.id }, { data: _data, message: _message }, { refresh: true });
                             });
-
                     } else {
                         $("#spinner-storagepool-snapshot-rollback-" + snapshot.id + " span").text("Rolling back snapshot...");
 
@@ -9005,14 +9771,12 @@ function FnSnapshotRollBackCommand(pool = { name, id }, snapshot = { name, id, f
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Snapshot successfully rolled back", message: snapshot.name }, { name: "snapshot-rollback", id: snapshot.id });
+            FnDisplayAlert({ status: "success", title: "Snapshot successfully rolled back", description: snapshot.name, breakword: false }, { name: "snapshot-rollback", id: snapshot.id, timeout: 4 });
 
             FnConsole.log[1]("Snapshots, Roll Back: Success, Pool: " + pool.name + ", Snapshot: " + snapshot.name);
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Snapshot could not be rolled back", message: snapshot.name }, { name: "snapshot-rollback", id: snapshot.id });
-
-            FnConsole.warn("Snapshots, Roll Back: Failed, Pool: " + pool.name + ", Snapshot: " + snapshot.name + ", Message: " + (data ? data : message));
+            FnSnapshotRollBackCommandFail({ name: pool.name, id: pool.id }, { name: snapshot.name, id: snapshot.id }, { data: data, message: message }, { refresh: false });
 
             display.refresh = true;
         })
@@ -9025,6 +9789,20 @@ function FnSnapshotRollBackCommand(pool = { name, id }, snapshot = { name, id, f
                 }, 200);
             }
         });
+}
+
+function FnSnapshotRollBackCommandFail(pool = { name, id }, snapshot = { name, id }, process = { data, message }, display = { refresh: true }) {
+    FnDisplayAlert({ status: "danger", title: "Snapshot could not be rolled back", description: snapshot.name, breakword: false }, { name: "snapshot-rollback", id: snapshot.id, timeout: 4 });
+
+    FnConsole.warn("Snapshots, Roll Back: Failed, Pool: " + pool.name + ", Snapshot: " + snapshot.name + ", Message: " + (process.data ? process.data : process.message));
+
+    if (display.refresh) {
+        $("#modal-storagepool-snapshot-rollback-" + snapshot.id).modal("hide");
+
+        setTimeout(function () {
+            FnStoragePoolRefresh({ name: pool.name, id: pool.id }, { storagepool: true, filesystems: true, snapshots: true, status: false });
+        }, 200);
+    }
 }
 
 function FnSnapshotRollBackSnapshotsGet(pool = { name, id }, snapshot = { name, id, creation }, modal = { name, id }) {
@@ -9113,7 +9891,7 @@ function FnStatusErrorColors(status = { count }) {
 
 function FnStatusGet(pool = { name, id }) {
     let process = {
-        command: ["/sbin/zpool", "status", "-p", "-t", pool.name]
+        command: ["/bin/sh", "-c", ((zfsmanager.user.name == "root" || !zfsmanager.user.name) ? "ZPOOL_SCRIPTS_AS_ROOT=1 " : "") + `/sbin/zpool status -p -t -c upath "` + pool.name + `"`]
     };
 
     pool.autotrim = ($("#tr-storagepool-" + pool.id).attr("data-pool-autotrim") == "true" ? true : false);
@@ -9316,7 +10094,7 @@ function FnStatusGetCommand(pool = { name, id, autotrim: false, boot: false, fea
             pool.status.output += `<tr><td><strong>Errors:</strong> ` + pool.status.errors + `</td></tr>`;
         }
         if (/\[TAB1\]NAME/g.test(_value)) { //Config header row
-            _value = _value.split("CKSUM").slice(1).join("."); //Remove config header row (and any previous text if exists)
+            _value = _value.split("upath").slice(1).join("."); //Remove config header row (and any previous text if exists)
 
             pool.status.config.regexp.tabspace = new RegExp("^\\[TAB1\\]" + pool.name);
 
@@ -9374,7 +10152,8 @@ function FnStatusGetCommand(pool = { name, id, autotrim: false, boot: false, fea
                 unsupported: false
             },
             replacing: false,
-            messages: []
+            messages: [],
+            upath: ""
         }
 
         if (_index == 0 && /[ ]/g.test(pool.name)) { //Fix for storage pool name if it contains whitespace
@@ -9435,12 +10214,27 @@ function FnStatusGetCommand(pool = { name, id, autotrim: false, boot: false, fea
         }
 
         pool.status.config.tier.virtualdevice = ((pool.status.config.tier.level == 0 && /^cache|^dedup|^logs|^spares|^special/g.test(pool.status.config.tier.nametier0) && pool.status.config.tier.count > 1) ? true : false);
-        
+
         if (pool.status.config.tier.level == 0 && /^special/g.test(pool.status.config.tier.nametier0) && pool.status.config.tier.count > 1) {
             $("#tr-storagepool-" + pool.id).attr("data-pool-special", true);
         }
 
-        if (/^nvme|^sd|^wwn-/gi.test(_value[0]) || $.isNumeric(_value[0])) {
+        if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[5])) { //upath
+            pool.status.disks.disk.upath = _value[5];
+            _value[5] = "";
+        } else if ($.isNumeric(_value[0]) && _value[5] == "was") { //upath appears after was device path message
+            pool.status.disks.disk.upath = _value[7];
+            _value[7] = "";
+        } else if (!$.isNumeric(_value[0]) && _value[5] != "was") { //upath appears after error messages and before trim messages
+            for (let i = 5; i < _value.length; i++) { //Collect messages
+                if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[i])) {
+                    pool.status.disks.disk.upath = _value[i];
+                    _value[i] = "";
+                }
+            }
+        }
+
+        if ((/^\/dev\/nvme|^\/dev\/sd/gi.test(pool.status.disks.disk.upath) || /^nvme-nvme/gi.test(_value[0]) || /^wwn-/gi.test(_value[0]) || $.isNumeric(_value[0])) && pool.status.config.tier.level > 0) {
             pool.status.config.disk = true;
             pool.status.disks.count++;
         }
@@ -9455,7 +10249,7 @@ function FnStatusGetCommand(pool = { name, id, autotrim: false, boot: false, fea
 
         pool.status.config.output += `<tr>`;
         pool.status.config.output += `<td class="config-level-` + pool.status.config.tier.level + (pool.status.config.tier.virtualdevice ? `-virtualdevice` : ``) + `" colspan="3"><span class="table-ct-head">` + (pool.status.config.tier.level == 0 && pool.status.config.tier.count == 1 && _value[0] == pool.name ? `Pool` : (pool.status.config.disk ? `Disk` : `Virtual Device`)) + `:</span>` + _value[0] + `</td>`; //Pool / Virtual Device / Disk
-        pool.status.config.output += `<td class="config-level-` + pool.status.config.tier.level + `-sub` + (pool.status.config.tier.virtualdevice ? `-hidden` : ``) +`"><span class="table-ct-head">State:</span>` + (_value[1] ? `<span class="` + FnStoragePoolHealthIcon({ health: _value[1] }) + `"></span> ` + _value[1] : ``) + `</td>`; //State
+        pool.status.config.output += `<td class="config-level-` + pool.status.config.tier.level + `-sub` + (pool.status.config.tier.virtualdevice ? `-hidden` : ``) + `"><span class="table-ct-head">State:</span>` + (_value[1] ? `<span class="` + FnStoragePoolHealthIcon({ health: _value[1] }) + `"></span> ` + _value[1] : ``) + `</td>`; //State
 
         if (_value[2] && /^spares/g.test(pool.status.config.tier.nametier0)) { //Read
             pool.status.disks.disk.messages.push(_value[2]);
@@ -9484,7 +10278,9 @@ function FnStatusGetCommand(pool = { name, id, autotrim: false, boot: false, fea
         }
 
         for (let i = 5; i < _value.length; i++) { //Collect messages
-            pool.status.disks.disk.messages.push(_value[i]);
+            if (_value[i]) {
+                pool.status.disks.disk.messages.push(_value[i]);
+            }
         }
 
         pool.status.disks.disk.messages = pool.status.disks.disk.messages.join(" "); //Join Messages for output
@@ -9509,7 +10305,7 @@ function FnStatusGetCommand(pool = { name, id, autotrim: false, boot: false, fea
             { pattern: /\) /g, replacement: " " }
         ];
 
-        pool.status.config.output += `<td class="config-level-` + pool.status.config.tier.level + `-sub` + (pool.status.config.tier.virtualdevice ? `-hidden` : ``) +`" colspan="3"><span class="table-ct-head">Message:</span>` + pool.status.config.replacement.messages.reduce((m, r) => m.replace(r.pattern, r.replacement), pool.status.disks.disk.messages) + `</td>`; //Message
+        pool.status.config.output += `<td class="config-level-` + pool.status.config.tier.level + `-sub` + (pool.status.config.tier.virtualdevice ? `-hidden` : ``) + `" colspan="3"><span class="table-ct-head">Message:</span>` + pool.status.config.replacement.messages.reduce((m, r) => m.replace(r.pattern, r.replacement), pool.status.disks.disk.messages) + `</td>`; //Message
 
         if (pool.status.config.disk) {
             if (/trimmed, started|trimmed started/i.test(pool.status.disks.disk.messages)) {
@@ -9527,12 +10323,12 @@ function FnStatusGetCommand(pool = { name, id, autotrim: false, boot: false, fea
             }
         }
 
-        pool.status.config.output += `<td class="config-level-` + pool.status.config.tier.level + `-sub` + (pool.status.config.tier.virtualdevice ? `-hidden` : ``) +`" colspan="3"><span class="table-ct-head">Product:</span>`; //Product
+        pool.status.config.output += `<td class="config-level-` + pool.status.config.tier.level + `-sub` + (pool.status.config.tier.virtualdevice ? `-hidden` : ``) + `" colspan="3"><span class="table-ct-head">Product:</span>`; //Product
 
         if (pool.status.config.disk) {
             disks.lsblk.blockdevices.forEach((__value, __index) => {
                 if (__value.type == "disk") {
-                    if ((/^nvme|^sd/gi.test(_value[0]) && _value[0] == __value.name) || /^nvme/gi.test(_value[0]) && _value[0] == "nvme-" + __value.wwn || /^wwn-/gi.test(_value[0]) && _value[0].replace(/^wwn-/gi, "") == __value.wwn) {
+                    if (pool.status.disks.disk.upath.replace(/^\/dev\//gi, "") == __value.name || "nvme-" + __value.wwn == _value[0] || "wwn-" + __value.wwn == _value[0]) {
                         if (__value.rota == 0 || __value.rota === "false") {
                             pool.status.disks.disk.ssd = true;
 
@@ -9541,8 +10337,6 @@ function FnStatusGetCommand(pool = { name, id, autotrim: false, boot: false, fea
                             }
                         }
 
-                        pool.status.config.output += FnFormatBytes({ base2: zfsmanager.configuration.disks.base2, decimals: 2, value: __value.size }) + " " + __value.model + (__value.serial ? " (" + __value.serial + ")" : "");
-                    } else if (/^nvme|^sd/gi.test(_value[0]) && (new RegExp("^" + __value.name).test(_value[0])) && (pool.boot || pool.root)) { //Ubuntu 19.10 by default creates bpool and rpool using partitions instead of disks
                         pool.status.config.output += FnFormatBytes({ base2: zfsmanager.configuration.disks.base2, decimals: 2, value: __value.size }) + " " + __value.model + (__value.serial ? " (" + __value.serial + ")" : "");
                     }
                 }
@@ -9745,7 +10539,7 @@ function FnStatusGetCommand(pool = { name, id, autotrim: false, boot: false, fea
 
                 pool.status.config.actionsmenu.register.disk.replace = true;
             }
-            
+
             if (pool.status.disks.disk.ssd && !pool.status.disks.disk.trim.unsupported && !pool.status.config.tier.cache && !pool.status.config.tier.spares) {
                 //TRIM Disk
                 if (!pool.status.disks.disk.trim.started && !pool.status.disks.disk.trim.suspended) {
@@ -9777,8 +10571,8 @@ function FnStatusGetCommand(pool = { name, id, autotrim: false, boot: false, fea
             }
         }
 
-        pool.status.config.output += `<td class="listing-ct-spinner ` + (pool.status.config.tier.virtualdevice ? `config-level-` + pool.status.config.tier.level + `-sub-hidden` : ``) +`"><div id="spinner-storagepool-status-` + _index + `-` + pool.id + `" class="spinner spinner-sm hidden"></div></td>`;
-        pool.status.config.output += `<td class="listing-ct-actionsmenu ` + (pool.status.config.tier.virtualdevice ? `config-level-` + pool.status.config.tier.level + `-sub-hidden` : ``) +`">` + pool.status.config.actionsmenu.display() + `</td>`;
+        pool.status.config.output += `<td class="listing-ct-spinner ` + (pool.status.config.tier.virtualdevice ? `config-level-` + pool.status.config.tier.level + `-sub-hidden` : ``) + `"><div id="spinner-storagepool-status-` + _index + `-` + pool.id + `" class="spinner spinner-sm hidden"></div></td>`;
+        pool.status.config.output += `<td class="listing-ct-actionsmenu ` + (pool.status.config.tier.virtualdevice ? `config-level-` + pool.status.config.tier.level + `-sub-hidden` : ``) + `">` + pool.status.config.actionsmenu.display() + `</td>`;
         pool.status.config.output += `</tr>`;
 
         $("#tbody-storagepool-status-config-" + pool.id).append(pool.status.config.output);
@@ -9962,7 +10756,7 @@ function FnSystemHostIdSet(system = { hostid }) {
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "System Host ID successfully configured", message: null }, { name: "system-hostid-set", id: null });
+            FnDisplayAlert({ status: "success", title: "System Host ID successfully configured", description: null, breakword: false }, { name: "system-hostid-set", id: null, timeout: 4 });
 
             FnConsole.log[1]("System, Host ID, Set: Success");
         })
@@ -10023,35 +10817,85 @@ function FnSystemOperatingSystemGet() {
 
 //#region Disks
 
-function FnDisksAvailableGet(disks = { wwn: true }, modal = { name, id, default: true }) {
+function FnDisksAvailableGet(modal = { name, id, default: true }) {
+    disks = {
+        attached: [],
+        id: {
+            device: [],
+            path: [],
+            vdev: []
+        },
+        importable: [],
+        importableconfig: [],
+        importableconfigok: false,
+        storagepools: [],
+        storagepoolsconfig: []
+
+    };
     modal.id = (modal.id ? "-" + modal.id : "");
 
     $("#listgroup-" + modal.name + modal.id).empty();
     $("#listgroup-" + modal.name + modal.id).append(`<li id="spinner-` + modal.name + modal.id + `" class="list-group-item"><div class="spinner"></div></li>`);
 
-    FnDisksStoragePoolsAttachedGet({ name: null, id: null }, { wwn: false })
+    FnDisksStoragePoolsAttachedGet({ name: null, id: null }, { id: { blockdevice: true } })
         .done(function (data) {
             FnConsole.log[4](FnConsoleVerbose({ data: data, message: "Disks, Storage Pools, Attached, Get:" }));
 
-            disks.storagepools = data.split(/\n/g).filter(v => v && (/\/dev\/nvme|\/dev\/s|\/dev\/disk\/by-id\//gi.test(v)));
-            disks.attached = [];
+            disks.storagepools = data.replace(/\n\t+/g, "[TAB1]").split(/\n/g).filter(v => v);
 
             disks.storagepools.forEach((_value, _index) => {
-                _value = _value.replace(/\t/g, "");
-                _value = _value.replace(/^ +/g, "");
-                if (/ +/g.test(_value)) {
-                    _value = _value.substring(0, _value.indexOf(" "));
+                if (/\[TAB1\]NAME/g.test(_value)) { //Config header row
+                    _value = _value.split("upath").slice(1).join("."); //Remove config header row (and any previous text if exists)
+
+                    if (new RegExp("^\\[TAB1\\]").test(_value)) { //Confirm config rows
+                        _value.split("[TAB1]").filter(v => v && disks.storagepoolsconfig.push(v));
+                    }
+                }
+            });
+
+            disks.storagepoolsconfig.forEach((_value, _index) => {
+                let config = {
+                    disk: {
+                        upath: ""
+                    },
+                    tier: {
+                        level: (_value.match(/^\s*/g)[0].length / 2)
+                    }
+                };
+
+                _value = _value.replace(/ +/g, "\u22C5").replace(/^\u22C5/, "").split("\u22C5").filter(v => v);
+
+                if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[5])) { //upath
+                    config.disk.upath = _value[5];
+                } else if (!$.isNumeric(_value[0]) && _value[5] != "was") { //upath appears after error messages and before trim messages
+                    for (let i = 5; i < _value.length; i++) {
+                        if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[i])) {
+                            config.disk.upath = _value[i];
+                        }
+                    }
                 }
 
-                if (/\/dev\/nvme/gi.test(_value)) {
-                    _value = _value.substring(0, _value.length - 2).replace(/\/dev\//gi, ""); //Remove partition number from device
-                } else if (/\/dev\/s/gi.test(_value)) {
-                    _value = _value.substring(0, _value.length - 1).replace(/\/dev\//gi, ""); //Remove partition number from device
-                } else if (/\/dev\/disk\/by-id\//gi.test(_value)) {
-                    _value = _value.substring(0, _value.toLowerCase().indexOf("-part")).replace(/\/dev\/disk\/by-id\//gi, ""); //Remove partition number from device
+                if (config.tier.level > 0) {
+                    if (/^\/dev\/nvme|^\/dev\/sd/gi.test(config.disk.upath)) { //Block Device via upath
+                        disks.attached.push(config.disk.upath.replace(/^\/dev\//gi, ""));
+                    } else if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[0])) { //Block Device
+                        if (/^\/dev\/nvme\d+n\d+p\d+$/gi.test(_value[0])) {
+                            disks.attached.push(_value[0].replace(/^\/dev\//gi, "").replace(/p\d+$/, ""));
+                        } else if (/^\/dev\/sd.*\d+$/gi.test(_value[0])) {
+                            disks.attached.push(_value[0].replace(/^\/dev\//gi, "").replace(/\d+$/, ""));
+                        } else {
+                            disks.attached.push(_value[0]);
+                        }
+                    } else if (/^nvme-nvme/gi.test(_value[0]) || /^wwn-/gi.test(_value[0])) { //WWN
+                        if (/^nvme-nvme.*-part\d+$/gi.test(_value[0])) {
+                            disks.attached.push(_value[0].replace(/-part\d+$/, ""));
+                        } else if (/^wwn-.*-part\d+$/gi.test(_value[0])) {
+                            disks.attached.push(_value[0].replace(/-part\d+$/, ""));
+                        } else {
+                            disks.attached.push(_value[0]);
+                        }
+                    }
                 }
-
-                disks.attached.push(_value);
             });
 
             disks.attached.sort();
@@ -10060,24 +10904,54 @@ function FnDisksAvailableGet(disks = { wwn: true }, modal = { name, id, default:
                 .done(function (_data) {
                     FnConsole.log[4](FnConsoleVerbose({ data: _data, message: "Disks, Storage Pools, Importable, Attached, Get:" }));
 
-                    disks.importable = _data.split(/\n/g).filter(v => v && (/^\t +nvme|^\t +s|^\t +wwn/gi.test(v)));
+                    disks.importable = _data.replace(/\n\t+/g, "[TAB1]").split(/\n/g).filter(v => v);
 
                     disks.importable.forEach((_value, _index) => {
-                        _value = _value.replace(/\t/g, "");
-                        _value = _value.replace(/^ +/g, "");
-                        if (/ +/g.test(_value)) {
-                            _value = _value.substring(0, _value.indexOf(" "));
+                        if (/config:/g.test(_value)) { //Config header row
+                            disks.importableconfigok = true;
                         }
 
-                        if (/\/dev\/nvme/gi.test(_value)) {
-                            _value = _value.replace(/\/dev\//gi, "");
-                        } else if (/\/dev\/s/gi.test(_value)) {
-                            _value = _value.replace(/\/dev\//gi, "");
-                        } else if (/\/dev\/disk\/by-id\//gi.test(_value)) {
-                            _value = _value.replace(/\/dev\/disk\/by-id\//gi, "");
+                        if (new RegExp("^\\[TAB1\\]").test(_value) && disks.importableconfigok) { //Confirm config rows
+                            _value.split("[TAB1]").filter(v => v && disks.importableconfig.push(v));
                         }
+                    });
 
-                        disks.attached.push(_value);
+                    disks.importableconfig.forEach((_value, _index) => {
+                        let config = {
+                            tier: {
+                                level: (_value.match(/^\s*/g)[0].length / 2)
+                            }
+                        };
+
+                        _value = _value.replace(/ +/g, "\u22C5").replace(/^\u22C5/, "").split("\u22C5").filter(v => v);
+
+                        if (config.tier.level > 0) {
+                            if (/^nvme|^sd/gi.test(_value[0])) { //Block Device
+                                if (/^nvme\d+n\d+p\d+$/gi.test(_value[0])) {
+                                    disks.attached.push(_value[0].replace(/p\d+$/, ""));
+                                } else if (/^sd.*\d+$/gi.test(_value[0])) {
+                                    disks.attached.push(_value[0].replace(/\d+$/, ""));
+                                } else {
+                                    disks.attached.push(_value[0]);
+                                }
+                            } else if (/^\/dev\/nvme|^\/dev\/sd/gi.test(_value[0])) { //Block Device
+                                if (/^\/dev\/nvme\d+n\d+p\d+$/gi.test(_value[0])) {
+                                    disks.attached.push(_value[0].replace(/^\/dev\//gi, "").replace(/p\d+$/, ""));
+                                } else if (/^\/dev\/sd.*\d+$/gi.test(_value[0])) {
+                                    disks.attached.push(_value[0].replace(/^\/dev\//gi, "").replace(/\d+$/, ""));
+                                } else {
+                                    disks.attached.push(_value[0]);
+                                }
+                            } else if (/^nvme-nvme/gi.test(_value[0]) || /^wwn-/gi.test(_value[0])) { //WWN
+                                if (/^nvme-nvme.*-part\d+$/gi.test(_value[0])) {
+                                    disks.attached.push(_value[0].replace(/-part\d+$/, ""));
+                                } else if (/^wwn-.*-part\d+$/gi.test(_value[0])) {
+                                    disks.attached.push(_value[0].replace(/-part\d+$/, ""));
+                                } else {
+                                    disks.attached.push(_value[0]);
+                                }
+                            }
+                        }
                     });
 
                     disks.attached.sort();
@@ -10106,7 +10980,43 @@ function FnDisksAvailableGet(disks = { wwn: true }, modal = { name, id, default:
 
                                     disks.blkid = replacement.regexp.reduce((d, r) => d.replace(r.pattern, r.replacement), ___data).split(/\n/g).filter(v => v);
 
-                                    FnDisksAvailableGetCommand({ attached: disks.attached, blkid: disks.blkid, lsblkjson: disks.lsblkjson, wwn: disks.wwn }, { name: modal.name, id: modal.id, default: modal.default });
+                                    FnDisksIdentifierDiskGet()
+                                        .done(function (____data) {
+                                            FnConsole.log[4](FnConsoleVerbose({ data: ____data, message: "Disks, Identifier, Disk / WWN, Get:" }));
+
+                                            disks.id.device = ____data.replace(/\t+/g, "\u22C5").replace(/..\/..\//g, "").split(/\n/g).filter(v => v && v != "\u22C5");
+
+                                            FnDisksIdentifierHardwarePathGet()
+                                                .done(function (_____data) {
+                                                    FnConsole.log[4](FnConsoleVerbose({ data: _____data, message: "Disks, Identifier, Hardware Path, Get:" }));
+
+                                                    disks.id.path = _____data.replace(/\t+/g, "\u22C5").replace(/..\/..\//g, "").split(/\n/g).filter(v => v && v != "\u22C5");
+
+                                                    FnDisksIdentifierVirtualDeviceMappingGet()
+                                                        .done(function (______data) {
+                                                            FnConsole.log[4](FnConsoleVerbose({ data: ______data, message: "Disks, Identifier, Virtual Device Mapping, Get:" }));
+
+                                                            disks.id.vdev = ______data.replace(/\t+/g, "\u22C5").replace(/..\/..\//g, "").split(/\n/g).filter(v => v && v != "\u22C5");
+
+                                                            FnDisksAvailableGetCommand({ attached: disks.attached, blkid: disks.blkid, id: { device: disks.id.device, path: disks.id.path, vdev: disks.id.vdev }, lsblkjson: disks.lsblkjson }, { name: modal.name, id: modal.id, default: modal.default });
+                                                        })
+                                                        .fail(function (______message, ______data) {
+                                                            FnConsole.warn("Disks, Available, Get: Failed, Message: " + (______data ? ______data : ______message));
+
+                                                            FnDisksAvailableGetFail({ name: modal.name, id: modal.id }, { data: ______data, message: ______message });
+                                                        });
+                                                })
+                                                .fail(function (_____message, _____data) {
+                                                    FnConsole.warn("Disks, Available, Get: Failed, Message: " + (_____data ? _____data : _____message));
+
+                                                    FnDisksAvailableGetFail({ name: modal.name, id: modal.id }, { data: _____data, message: _____message });
+                                                });
+                                        })
+                                        .fail(function (____message, ____data) {
+                                            FnConsole.warn("Disks, Available, Get: Failed, Message: " + (____data ? ____data : ____message));
+
+                                            FnDisksAvailableGetFail({ name: modal.name, id: modal.id }, { data: ____data, message: ____message });
+                                        });
                                 })
                                 .fail(function (___message, ___data) {
                                     FnConsole.warn("Disks, Available, Get: Failed, Message: " + (___data ? ___data : ___message));
@@ -10133,23 +11043,28 @@ function FnDisksAvailableGet(disks = { wwn: true }, modal = { name, id, default:
         });
 }
 
-function FnDisksAvailableGetCommand(disks = { attached: [], blkid: [], lsblkjson, wwn: true }, modal = { name, id, default: true }) {
+function FnDisksAvailableGetCommand(disks = { attached: [], blkid: [], id: { device: [], path: [], vdev: [] }, lsblkjson }, modal = { name, id, default: true }) {
     disks.lsblk = JSON.parse(disks.lsblkjson);
     disks.regexp = {};
 
     disks.lsblk.blockdevices.forEach((_value, _index) => {
         if (_value.type == "disk") {
             let disk = {
-                id: "",
+                id: {
+                    blockdevice: "",
+                    disk: "",
+                    path: "",
+                    vdev: "",
+                    wwn: ""
+                },
                 allow: true,
                 zfsmember: false,
                 warning: "",
                 warningicon: "",
-                wwn: ""
             };
 
             disks.attached.forEach((__value, __index) => {
-                if (_value.name == __value || _value.wwn == __value || "wwn-" + _value.wwn == __value) { //Do not allow if disk nvme, disk sd name or disk wwn identifier match
+                if (_value.name == __value || _value.wwn == __value || "nvme-" + _value.wwn == __value || "wwn-" + _value.wwn == __value) { //Do not allow if block device or WWN identifier match
                     disk.allow = false;
                     return;
                 }
@@ -10182,36 +11097,61 @@ function FnDisksAvailableGetCommand(disks = { attached: [], blkid: [], lsblkjson
                     $("#helpblock-" + modal.name + "-zfsmemberwarning" + modal.id).html("One or more disks used to be a member of a Storage Pool." + disk.warningicon);
                 }
 
-                disk.id = _value.name;
+                disk.id.blockdevice = _value.name;
 
-                if (disks.wwn) {
-                    if (!_value.wwn) {
-                        disk.wwn = "";
-                        disk.warning = "One or more disks is missing a WWN identifier.";
+                if (!_value.wwn) {
+                    disk.id.wwn = "";
+                    disk.warning = "One or more disks is missing a WWN identifier.";
 
-                        $("#helpblock-" + modal.name + "-wwnwarning" + modal.id).text(disk.warning);
-                    } else {
-                        if (/^nvme/gi.test(_value.wwn)) {
-                            disk.wwn = "nvme-" + _value.wwn;
-                        } else {
-                            disk.wwn = "wwn-" + _value.wwn;
-                        }
-                    }
+                    $("#helpblock-" + modal.name + "-identifierwarning" + modal.id).removeClass("hidden").text(disk.warning);
                 } else {
-                    disk.wwn = "";
-
-                    if ($("#helpblock-" + modal.name + "-wwnwarning" + modal.id).text() == disk.warning) {
-                        $("#helpblock-" + modal.name + "-wwnwarning" + modal.id).addClass("hidden").text("");
+                    if (/^nvme/gi.test(_value.wwn)) {
+                        disk.id.wwn = "nvme-" + _value.wwn;
+                    } else {
+                        disk.id.wwn = "wwn-" + _value.wwn;
                     }
                 }
+
+                disks.id.device.forEach((_value, _index) => {
+                    _value = _value.split("\u22C5");
+
+                    if (_value[1] == disk.id.blockdevice) {
+                        if (/^nvme-nvme|^wwn-/gi.test(_value[0])) {
+                            return;
+                        } else {
+                            disk.id.disk = _value[0];
+                            return;
+                        }
+                    }
+                });
+
+                disks.id.path.forEach((_value, _index) => {
+                    _value = _value.split("\u22C5");
+
+                    if (_value[1] == disk.id.blockdevice) {
+                        disk.id.path = _value[0];
+
+                        return;
+                    }
+                });
+
+                disks.id.vdev.forEach((_value, _index) => {
+                    _value = _value.split("\u22C5");
+
+                    if (_value[1] == disk.id.blockdevice) {
+                        disk.id.vdev = _value[0];
+
+                        return;
+                    }
+                });
 
                 disks.output = `
                     <li class="list-group-item hidden">
                         <label class="select-ct-disk-row">
-                            <input name="checkbox-` + modal.name + modal.id + `" data-disk-name="` + ((!_value.wwn || !disks.wwn) ? disk.id : disk.wwn) + `" data-disk-wwn="` + (_value.wwn ? "true" : "false") + `" tabindex="` + (_index + 100) + `" type="checkbox">
+                            <input name="checkbox-` + modal.name + modal.id + `" data-disk-name="` + (disk.id.wwn ? disk.id.wwn : disk.id.blockdevice) + `" data-disk-id-blockdevice="` + disk.id.blockdevice + `" data-disk-id-disk="` + (disk.id.disk ? disk.id.disk : "") + `" data-disk-id-path="` + (disk.id.path ? disk.id.path : "") + `" data-disk-id-vdev="` + (disk.id.vdev ? disk.id.vdev : "") + `" data-disk-id-wwn="` + (disk.id.wwn ? disk.id.wwn : "") + `" tabindex="` + (_index + 100) + `" type="checkbox">
                             <span>
                                 ` + FnFormatBytes({ base2: zfsmanager.configuration.disks.base2, decimals: 2, value: _value.size }) + " " + _value.model + (_value.serial ? " (" + _value.serial + ")" : "") + `
-                                <span class="select-ct-disk-row-id">` + ((!_value.wwn || !disks.wwn) ? "/dev/" + disk.id : disk.wwn) + `</span>
+                                <span class="select-ct-disk-row-id">` + (!disk.id.wwn ? "/dev/" + disk.id.blockdevice : disk.id.wwn) + `</span>
                                 <span class="select-ct-pool-row-physec">Physical Sector Size: ` + FnFormatBytes({ base2: true, decimals: 0, value: _value["phy-sec"] }) + `</span>
                             </span>
                             <span>` + disk.warningicon + `</span>
@@ -10228,8 +11168,8 @@ function FnDisksAvailableGetCommand(disks = { attached: [], blkid: [], lsblkjson
         $("#spinner-" + modal.name + modal.id).remove();
         $("#listgroup-" + modal.name + modal.id + " > li").removeClass("hidden");
 
-        if ($("#helpblock-" + modal.name + "-wwnwarning" + modal.id).text) {
-            $("#helpblock-" + modal.name + "-wwnwarning" + modal.id).removeClass("hidden");
+        if ($("#helpblock-" + modal.name + "-identifierwarning" + modal.id).text) {
+            $("#helpblock-" + modal.name + "-identifierwarning" + modal.id).removeClass("hidden");
         }
         if ($("#helpblock-" + modal.name + "-zfsmemberwarning" + modal.id).text()) {
             $("#helpblock-" + modal.name + "-zfsmemberwarning" + modal.id).removeClass("hidden");
@@ -10239,11 +11179,11 @@ function FnDisksAvailableGetCommand(disks = { attached: [], blkid: [], lsblkjson
             if (modal.name == "storagepools-create-disks") {
                 $("#btnspan-storagepools-create-virtualdevice").text("Disk").attr("data-field-value", "disk");
                 $("#dropdown-storagepools-create-virtualdevice li").siblings().removeClass("active");
-                $("#dropdown-storagepools-create-virtualdevice li[value='Disk']").addClass("active");
+                $("#dropdown-storagepools-create-virtualdevice li[value='disk']").addClass("active");
             } else if (modal.name == "storagepool-status-virtualdevice-add-disks") {
                 $("#btnspan-storagepool-status-virtualdevice-add-virtualdevice" + modal.id).text("Disk").attr("data-field-value", "disk");
                 $("#dropdown-storagepool-status-virtualdevice-add-virtualdevice" + modal.id + " li").siblings().removeClass("active");
-                $("#dropdown-storagepool-status-virtualdevice-add-virtualdevice" + modal.id + " li[value='Disk']").addClass("active");
+                $("#dropdown-storagepool-status-virtualdevice-add-virtualdevice" + modal.id + " li[value='disk']").addClass("active");
             }
         }
 
@@ -10303,6 +11243,57 @@ function FnDisksBlkidGet() {
         });
 }
 
+function FnDisksIdentifierDiskGet() {
+    let process = {
+        command: ["/bin/sh", "-c", `ls -lF /dev/disk/by-id | awk '{ print $9"\t"$11 }'`]
+    };
+
+    FnConsole.log[2]("Disks, Identifier, Disk / WWN, Get: In Progress");
+    FnConsole.log[3](FnConsoleCommand({ command: process.command }));
+
+    return cockpit.spawn(process.command, { err: "out", superuser: "require" })
+        .done(function () {
+            FnConsole.log[2]("Disks, Identifier, Disk / WWN, Get: Success");
+        })
+        .fail(function (message, data) {
+            FnConsole.warn("Disks, Identifier, Disk / WWN, Get: Failed, Message: " + (data ? data : message));
+        });
+}
+
+function FnDisksIdentifierHardwarePathGet() {
+    let process = {
+        command: ["/bin/sh", "-c", `ls -lF /dev/disk/by-path | awk '{ print $9"\t"$11 }'`]
+    };
+
+    FnConsole.log[2]("Disks, Identifier, Hardware Path, Get: In Progress");
+    FnConsole.log[3](FnConsoleCommand({ command: process.command }));
+
+    return cockpit.spawn(process.command, { err: "out", superuser: "require" })
+        .done(function () {
+            FnConsole.log[2]("Disks, Identifier, Hardware Path, Get: Success");
+        })
+        .fail(function (message, data) {
+            FnConsole.warn("Disks, Identifier, Hardware Path, Get: Failed, Message: " + (data ? data : message));
+        });
+}
+
+function FnDisksIdentifierVirtualDeviceMappingGet() {
+    let process = {
+        command: ["/bin/sh", "-c", `[ -d /dev/disk/by-vdev ] && ls -lF /dev/disk/by-vdev | awk '{ print $9"\t"$11 }' || printf ""`]
+    };
+
+    FnConsole.log[2]("Disks, Identifier, Virtual Device Mapping, Get: In Progress");
+    FnConsole.log[3](FnConsoleCommand({ command: process.command }));
+
+    return cockpit.spawn(process.command, { err: "out", superuser: "require" })
+        .done(function () {
+            FnConsole.log[2]("Disks, Identifier, Virtual Device Mapping, Get: Success");
+        })
+        .fail(function (message, data) {
+            FnConsole.warn("Disks, Identifier, Virtual Device Mapping, Get: Failed, Message: " + (data ? data : message));
+        });
+}
+
 function FnDisksLsblkGet(disks = { sizeraw: true }) {
     let process = {
         command: ["/bin/sh", "-c", "/bin/lsblk -o label,model,mountpoint,name,partuuid,phy-sec,rota,serial,size,type,uuid,vendor,wwn -J" + (disks.sizeraw ? " -b" : "")]
@@ -10320,18 +11311,10 @@ function FnDisksLsblkGet(disks = { sizeraw: true }) {
         });
 }
 
-function FnDisksStoragePoolsAttachedGet(pool = { name, id }, disks = { wwn: false }) {
+function FnDisksStoragePoolsAttachedGet(pool = { name, id }, disks = { id: { blockdevice: true } }) {
     let process = {
-        command: ["/sbin/zpool", "status", "-P"]
+        command: ["/bin/sh", "-c", ((zfsmanager.user.name == "root" || !zfsmanager.user.name) ? "ZPOOL_SCRIPTS_AS_ROOT=1 " : "") + "/sbin/zpool status -P " + (disks.id.blockdevice ? "-L " : "") + "-c upath" + (pool.name ? ` "` + pool.name + `"` : "")]
     };
-
-    if (pool.name) {
-        process.command.push(pool.name);
-    }
-
-    if (!disks.wwn) {
-        process.command.splice(2, 0, "-L");
-    }
 
     FnConsole.log[2]("Disks, Storage Pools, Attached, Get: In Progress");
     FnConsole.log[3](FnConsoleCommand({ command: process.command }));
@@ -10491,7 +11474,7 @@ function FnSambaShareDestroy(pool = { name, id, altroot: false, readonly: false 
                             FnSambaRestart()
                                 .finally(function () {
                                     if (!display.silent) {
-                                        FnDisplayNotification({ status: "success", title: "Samba share successfully destroyed", message: filesystem.name }, { name: "samba-destroy", id: filesystem.id });
+                                        FnDisplayAlert({ status: "success", title: "Samba share successfully destroyed", description: filesystem.name, breakword: false }, { name: "samba-destroy", id: filesystem.id, timeout: 4 });
                                     }
 
                                     FnConsole.log[1]("Samba, Share, Destroy: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
@@ -10502,7 +11485,7 @@ function FnSambaShareDestroy(pool = { name, id, altroot: false, readonly: false 
                             FnSambaConfigurationReload()
                                 .finally(function () {
                                     if (!display.silent) {
-                                        FnDisplayNotification({ status: "success", title: "Samba share successfully destroyed", message: filesystem.name }, { name: "samba-destroy", id: filesystem.id });
+                                        FnDisplayAlert({ status: "success", title: "Samba share successfully destroyed", description: filesystem.name, breakword: false }, { name: "samba-destroy", id: filesystem.id, timeout: 4 });
                                     }
 
                                     FnConsole.log[1]("Samba, Share, Destroy: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
@@ -10535,7 +11518,7 @@ function FnSambaShareDisable(pool = { name, id, altroot: false, readonly: false 
                     FnSambaShareDisableCommand({ name: pool.name, id: pool.id, altroot: pool.altroot, readonly: pool.readonly }, { name: filesystem.name, id: filesystem.id }, { restart: samba.restart }, { modal: display.modal, silent: display.silent });
                 } else {
                     if (!display.silent) {
-                        FnDisplayNotification({ status: "danger", title: "Samba share could not be disabled", message: filesystem.name }, { name: "samba-disable", id: filesystem.id });
+                        FnDisplayAlert({ status: "danger", title: "Samba share could not be disabled", description: filesystem.name, breakword: false }, { name: "samba-disable", id: filesystem.id, timeout: 4 });
                     }
 
                     if (display.modal) {
@@ -10562,7 +11545,7 @@ function FnSambaShareDisableCommand(pool = { name, id, altroot: false, readonly:
                             FnSambaRestart()
                                 .finally(function () {
                                     if (!display.silent) {
-                                        FnDisplayNotification({ status: "success", title: "Samba share successfully disabled", message: filesystem.name }, { name: "samba-disable", id: filesystem.id });    
+                                        FnDisplayAlert({ status: "success", title: "Samba share successfully disabled", description: filesystem.name, breakword: false }, { name: "samba-disable", id: filesystem.id, timeout: 4 });
                                     }
 
                                     if (display.modal) {
@@ -10577,7 +11560,7 @@ function FnSambaShareDisableCommand(pool = { name, id, altroot: false, readonly:
                             FnSambaConfigurationReload()
                                 .finally(function () {
                                     if (!display.silent) {
-                                        FnDisplayNotification({ status: "success", title: "Samba share successfully disabled", message: filesystem.name }, { name: "samba-diable", id: filesystem.id });
+                                        FnDisplayAlert({ status: "success", title: "Samba share successfully disabled", description: filesystem.name, breakword: false }, { name: "samba-diable", id: filesystem.id, timeout: 4 });
                                     }
 
                                     if (display.modal) {
@@ -10705,7 +11688,7 @@ function FnSambaShareEnableCommand(pool = { name, id, readonly: false }, filesys
                     FnSambaShareEnableCommandFinally({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, mounted: filesystem.mounted, mountpoint: filesystem.mountpoint }, { share: { additional: samba.share.additional, administrative: samba.share.administrative, browseable: samba.share.browseable, guestok: samba.share.guestok, name: samba.share.name, comment: samba.share.comment, readonly: samba.share.readonly, temporary: samba.share.temporary } }, { refresh: display.refresh, silent: display.silent });
                 } else {
                     if (!display.silent) {
-                        FnDisplayNotification({ status: "danger", title: "Samba share could not be enabled", message: filesystem.name }, { name: "samba-enable", id: filesystem.id });
+                        FnDisplayAlert({ status: "danger", title: "Samba share could not be enabled", description: filesystem.name, breakword: false }, { name: "samba-enable", id: filesystem.id, timeout: 4 });
                     }
 
                     setTimeout(function () {
@@ -10722,7 +11705,7 @@ function FnSambaShareEnableCommandFinally(pool = { name, id }, filesystem = { na
     FnSambaZfsShareEnable({ name: pool.name, id: pool.id }, { name: filesystem.name, id: filesystem.id, mountpoint: filesystem.mountpoint }, { share: { additional: samba.share.additional, administrative: samba.share.administrative, browseable: samba.share.browseable, guestok: samba.share.guestok, name: samba.share.name, comment: samba.share.comment, readonly: samba.share.readonly, temporary: samba.share.temporary } })
         .done(function () {
             if (!display.silent) {
-                FnDisplayNotification({ status: "success", title: "Samba share successfully enabled", message: filesystem.name }, { name: "samba-enable", id: filesystem.id });
+                FnDisplayAlert({ status: "success", title: "Samba share successfully enabled", description: filesystem.name, breakword: false }, { name: "samba-enable", id: filesystem.id, timeout: 4 });
             }
 
             if (samba.reload) {
@@ -10835,7 +11818,7 @@ function FnSambaSharesDestroy(pool = { name, id, altroot: false, readonly: false
                     if (_index == (filesystems.id.length - 1)) {
                         setTimeout(function () {
                             if (!display.silent) {
-                                FnDisplayNotification({ status: "success", title: "Samba shares successfully destroyed", message: pool.name }, { name: "samba-destroy", id: pool.id });
+                                FnDisplayAlert({ status: "success", title: "Samba shares successfully destroyed", description: pool.name, breakword: false }, { name: "samba-destroy", id: pool.id, timeout: 4 });
                             }
 
                             FnConsole.log[1]("Samba, Shares, Destroy: Success, Pool: " + pool.name);
@@ -10865,7 +11848,7 @@ function FnSambaSharesDestroy(pool = { name, id, altroot: false, readonly: false
         });
     } else {
         if (!display.silent) {
-            FnDisplayNotification({ status: "success", title: "Samba shares successfully destroyed", message: pool.name }, { name: "samba-destroy", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Samba shares successfully destroyed", description: pool.name, breakword: false }, { name: "samba-destroy", id: pool.id, timeout: 4 });
         }
 
         FnConsole.log[1]("Samba, Shares, Destroy: Success, Pool: " + pool.name);
@@ -10890,7 +11873,7 @@ function FnSambaSharesDestroyAll(samba = { restart: false }, display = { silent:
     cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
             if (!display.silent) {
-                FnDisplayNotification({ status: "success", title: "Samba shares successfully destroyed", message: null }, { name: "samba-destroy-all", id: null });
+                FnDisplayAlert({ status: "success", title: "Samba shares successfully destroyed", description: null, breakword: false }, { name: "samba-destroy-all", id: null, timeout: 4 });
             }
 
             FnConsole.log[1]("Samba, Shares, Destroy All: Success");
@@ -10909,7 +11892,7 @@ function FnSambaSharesDestroyAll(samba = { restart: false }, display = { silent:
         })
         .fail(function (message, data) {
             if (!display.silent) {
-                FnDisplayNotification({ status: "danger", title: "Samba shares could not be destroyed", message: null }, { name: "samba-destroy-all", id: null });
+                FnDisplayAlert({ status: "danger", title: "Samba shares could not be destroyed", description: null, breakword: false }, { name: "samba-destroy-all", id: null, timeout: 4 });
             }
 
             FnConsole.warn("Samba, Shares, Destroy All: Failed, Message: " + (data ? data : message));
@@ -10967,7 +11950,7 @@ function FnSambaSharesEnable(pool = { name, id, altroot: false, readonly: false 
                             if (_index == (filesystems.id.length - 1)) {
                                 setTimeout(function () {
                                     if (!display.silent) {
-                                        FnDisplayNotification({ status: "success", title: "Samba shares successfully enabled", message: pool.name }, { name: "samba-enable", id: pool.id });
+                                        FnDisplayAlert({ status: "success", title: "Samba shares successfully enabled", description: pool.name, breakword: false }, { name: "samba-enable", id: pool.id, timeout: 4 });
                                     }
 
                                     FnConsole.log[1]("Samba, Shares, Enable: Success, Pool: " + pool.name);
@@ -11009,7 +11992,7 @@ function FnSambaSharesEnable(pool = { name, id, altroot: false, readonly: false 
                 });
             } else {
                 if (!display.silent) {
-                    FnDisplayNotification({ status: "success", title: "Samba shares successfully enabled", message: pool.name }, { name: "samba-enable", id: pool.id });
+                    FnDisplayAlert({ status: "success", title: "Samba shares successfully enabled", description: pool.name, breakword: false }, { name: "samba-enable", id: pool.id, timeout: 4 });
                 }
 
                 FnConsole.log[1]("Samba, Shares, Enable: Success, Pool: " + pool.name);
@@ -11019,7 +12002,7 @@ function FnSambaSharesEnable(pool = { name, id, altroot: false, readonly: false 
         })
         .fail(function (message, data) {
             if (!display.silent) {
-                FnDisplayNotification({ status: "danger", title: "Samba shares could not enabled", message: pool.name }, { name: "samba-enable", id: pool.id });
+                FnDisplayAlert({ status: "danger", title: "Samba shares could not enabled", description: pool.name, breakword: false }, { name: "samba-enable", id: pool.id, timeout: 4 });
             }
 
             FnConsole.warn("Samba, Shares, Enable: Failed, Pool: " + pool.name + ", Message: " + (data ? data : message));
@@ -11099,7 +12082,7 @@ function FnSambaSharesEnableAll(samba = { restart: false }, display = { silent: 
                                             if (_index == (filesystems.id.length - 1)) {
                                                 setTimeout(function () {
                                                     if (!display.silent) {
-                                                        FnDisplayNotification({ status: "success", title: "Samba shares successfully enabled", message: null }, { name: "samba-enable-all", id: null });
+                                                        FnDisplayAlert({ status: "success", title: "Samba shares successfully enabled", description: null, breakword: false }, { name: "samba-enable-all", id: null, timeout: 4 });
                                                     }
 
                                                     FnConsole.log[1]("Samba, Shares, Enable All: Success");
@@ -11129,7 +12112,7 @@ function FnSambaSharesEnableAll(samba = { restart: false }, display = { silent: 
                                 });
                             } else {
                                 if (!display.silent) {
-                                    FnDisplayNotification({ status: "success", title: "Samba shares successfully enabled", message: null }, { name: "samba-enable-all", id: null });
+                                    FnDisplayAlert({ status: "success", title: "Samba shares successfully enabled", description: null, breakword: false }, { name: "samba-enable-all", id: null, timeout: 4 });
                                 }
 
                                 FnConsole.log[1]("Samba, Shares, Enable All: Success");
@@ -11139,7 +12122,7 @@ function FnSambaSharesEnableAll(samba = { restart: false }, display = { silent: 
                         })
                         .fail(function (message, data) {
                             if (!display.silent) {
-                                FnDisplayNotification({ status: "danger", title: "Samba shares could not be enabled", message: null }, { name: "samba-enable-all", id: null });
+                                FnDisplayAlert({ status: "danger", title: "Samba shares could not be enabled", description: null, breakword: false }, { name: "samba-enable-all", id: null, timeout: 4 });
                             }
 
                             FnConsole.warn("Samba, Shares, Enable All: Failed, Message: " + (data ? data : message));
@@ -11150,7 +12133,7 @@ function FnSambaSharesEnableAll(samba = { restart: false }, display = { silent: 
         })
         .fail(function (message, data) {
             if (!display.silent) {
-                FnDisplayNotification({ status: "danger", title: "Samba shares could not be enabled", message: null }, { name: "samba-enable-all", id: null });
+                FnDisplayAlert({ status: "danger", title: "Samba shares could not be enabled", description: null, breakword: false }, { name: "samba-enable-all", id: null, timeout: 4 });
             }
 
             FnConsole.warn("Samba, Shares, Enable All: Failed, Message: " + (data ? data : message));
@@ -11200,7 +12183,7 @@ function FnSambaSharesRename(pool = { name, id, altroot: false, readonly: false 
                 properties: _value.split(/\t/g).filter(v => v)
             };
 
-            filesystem.name = filesystem.properties[0];            
+            filesystem.name = filesystem.properties[0];
             filesystem.id = FnGenerateId({ at: true, colon: true, forwardslash: true, period: true, underscore: true, whitespace: true }, { name: filesystem.properties[0], attribute: true });
             filesystem.mounted = filesystem.properties[1];
             filesystem.mountpoint = filesystem.properties[2];
@@ -11216,7 +12199,7 @@ function FnSambaSharesRename(pool = { name, id, altroot: false, readonly: false 
                             FnFileSystemMountpointGet({ name: pool.name, id: pool.id }, { name: filesystem.namenew, id: filesystem.idnew })
                                 .done(function (data) {
                                     filesystem.mountpoint = data.replace(/\n$/, "");
-                                    
+
                                     FnSambaZfsShareConfigurationPathSet({ name: pool.name, id: pool.id, altroot: pool.altroot }, { name: filesystem.name, namenew: filesystem.namenew, id: filesystem.id, mountpoint: filesystem.mountpoint })
                                         .finally(function () {
                                             FnSambaZfsShareDisable({ name: pool.name, id: pool.id, altroot: pool.altroot, readonly: pool.readonly }, { name: filesystem.name, id: filesystem.id });
@@ -11228,7 +12211,7 @@ function FnSambaSharesRename(pool = { name, id, altroot: false, readonly: false 
                     if (_index == (filesystems.id.length - 1)) {
                         setTimeout(function () {
                             if (!display.silent) {
-                                FnDisplayNotification({ status: "success", title: "Samba shares successfully renamed", message: pool.name }, { name: "samba-rename", id: pool.id });
+                                FnDisplayAlert({ status: "success", title: "Samba shares successfully renamed", description: pool.name, breakword: false }, { name: "samba-rename", id: pool.id, timeout: 4 });
                             }
 
                             FnConsole.log[1]("Samba, Shares, Rename: Success, Pool: " + pool.name);
@@ -11258,7 +12241,7 @@ function FnSambaSharesRename(pool = { name, id, altroot: false, readonly: false 
         });
     } else {
         if (!display.silent) {
-            FnDisplayNotification({ status: "success", title: "Samba shares successfully renamed", message: pool.name }, { name: "samba-rename", id: pool.id });
+            FnDisplayAlert({ status: "success", title: "Samba shares successfully renamed", description: pool.name, breakword: false }, { name: "samba-rename", id: pool.id, timeout: 4 });
         }
 
         FnConsole.log[1]("Samba, Shares, Rename: Success, Pool: " + pool.name);
@@ -11704,14 +12687,14 @@ function FnSambaZfsShareConfigurationPathSetCommand(pool = { name, id }, filesys
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
             if (!display.silent) {
-                FnDisplayNotification({ status: "success", title: "Samba share configuration successfully updated", message: filesystem.name }, { name: "samba-configure-share", id: filesystem.id });
+                FnDisplayAlert({ status: "success", title: "Samba share configuration successfully updated", description: filesystem.name, breakword: false }, { name: "samba-configure-share", id: filesystem.id, timeout: 4 });
             }
 
             FnConsole.log[1]("Samba, ZFS Share Configuration, Path, Set: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
         })
         .fail(function (message, data) {
             if (!display.silent) {
-                FnDisplayNotification({ status: "danger", title: "Samba share configuration could not be updated", message: filesystem.name }, { name: "samba-configure-share", id: filesystem.id });
+                FnDisplayAlert({ status: "danger", title: "Samba share configuration could not be updated", description: filesystem.name, breakword: false }, { name: "samba-configure-share", id: filesystem.id, timeout: 4 });
             }
 
             FnConsole.warn("Samba, ZFS Share Configuration, Path, Set: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
@@ -11758,7 +12741,7 @@ function FnSambaZfsShareConfigurationPathsSet(pool = { name, id, altroot: false 
 
                             if (_index == (filesystems.id.length - 1)) {
                                 setTimeout(function () {
-                                    FnDisplayNotification({ status: "success", title: "Samba share configurations successfully updated", message: pool.name }, { name: "samba-configure-share", id: pool.id });
+                                    FnDisplayAlert({ status: "success", title: "Samba share configurations successfully updated", description: pool.name, breakword: false }, { name: "samba-configure-share", id: pool.id, timeout: 4 });
 
                                     FnConsole.log[1]("Samba, ZFS Share Configuration, Paths, Set: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
 
@@ -11798,7 +12781,7 @@ function FnSambaZfsShareConfigurationPathsSet(pool = { name, id, altroot: false 
                     ));
                 });
             } else {
-                FnDisplayNotification({ status: "success", title: "Samba share configurations successfully updated", message: pool.name }, { name: "samba-configure-share", id: pool.id });
+                FnDisplayAlert({ status: "success", title: "Samba share configurations successfully updated", description: pool.name, breakword: false }, { name: "samba-configure-share", id: pool.id, timeout: 4 });
 
                 FnConsole.log[1]("Samba, ZFS Share Configuration, Paths, Set: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
 
@@ -11806,7 +12789,7 @@ function FnSambaZfsShareConfigurationPathsSet(pool = { name, id, altroot: false 
             }
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Samba share configurations could not updated", message: pool.name }, { name: "samba-configure-share", id: pool.id });
+            FnDisplayAlert({ status: "danger", title: "Samba share configurations could not updated", description: pool.name, breakword: false }, { name: "samba-configure-share", id: pool.id, timeout: 4 });
 
             FnConsole.warn("Samba, ZFS Share Configuration, Paths, Set: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
 
@@ -11877,7 +12860,7 @@ function FnSambaZfsShareConfigureCommand(pool = { name, id }, filesystem = { nam
 
     return cockpit.spawn(process.command, { err: "out", superuser: "require" })
         .done(function () {
-            FnDisplayNotification({ status: "success", title: "Samba share configuration successfully updated", message: filesystem.name }, { name: "samba-configure-share", id: filesystem.id });
+            FnDisplayAlert({ status: "success", title: "Samba share configuration successfully updated", description: filesystem.name, breakword: false }, { name: "samba-configure-share", id: filesystem.id, timeout: 4 });
 
             FnConsole.log[1]("Samba, ZFS Share Configuration, Update: Success, Pool: " + pool.name + ", File System: " + filesystem.name);
 
@@ -11888,7 +12871,7 @@ function FnSambaZfsShareConfigureCommand(pool = { name, id }, filesystem = { nam
             }
         })
         .fail(function (message, data) {
-            FnDisplayNotification({ status: "danger", title: "Samba share configuration could not be updated", message: filesystem.name }, { name: "samba-configure-share", id: filesystem.id });
+            FnDisplayAlert({ status: "danger", title: "Samba share configuration could not be updated", description: filesystem.name, breakword: false }, { name: "samba-configure-share", id: filesystem.id, timeout: 4 });
 
             FnConsole.warn("Samba, ZFS Share Configuration, Update: Failed, Pool: " + pool.name + ", File System: " + filesystem.name + ", Message: " + (data ? data : message));
         })
@@ -12181,8 +13164,9 @@ function FnModalAbout() {
                     </div>
                     <div class="modal-body">
                         <div class="modal-ct-bodytext-1">Cockpit ZFS Manager is an interactive ZFS on Linux admin package for Cockpit.</div>
+                        ` + FnDisplayInlineAlert({ status: "info", title: "A new version of Cockpit ZFS Manager is now available", description: `<span id="span-about-update-version"></span>` }, { name: "about-update", id: null, hidden: true }) + `
                         <div><span>Version:</span> <span>` + zfsmanager.version + `</span></div>
-                        <div>Copyright &copy; 2019 OPTIMANS Pty Ltd.</div>
+                        <div>Copyright &copy; 2019-2020 OPTIMANS Pty Ltd.</div>
                         <div>Website: <a href="https://github.com/optimans/cockpit-zfs-manager" target="_blank">github.com/optimans/cockpit-zfs-manager</a></div>
                         <div><span>Licensed under:</span> <a href="https://opensource.org/licenses/lgpl-3.0.html" target="_blank">GNU LGPL version 3</a></div>
                     </div>
@@ -12219,14 +13203,14 @@ function FnModalConfigure() {
 }
 
 function FnModalConfigureContent(modal = { id }) {
-    modal.content = `        
+    modal.content = `
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
                     <h4 class="modal-title">Configure Cockpit ZFS Manager</h4>
                 </div>
                 <div class="modal-body">
-                    ` + (!zfsmanager.user.configuration ? `<div class="alert alert-info"><span class="pficon pficon-info"></span><span>Configuration does not exist. Configure to save an configuration.</span></div>` : ``) + `
+                    ` + (!zfsmanager.user.configuration ? FnDisplayInlineAlert({ status: "info", title: "Configuration does not exist. Configure to save a new configuration.", description: null }, { name: null, id: null, hidden: false }) : ``) + `
                     <form class="ct-form">
                         <label class="control-label">Default Tab</label>
                         <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
@@ -12278,25 +13262,32 @@ function FnModalConfigureContent(modal = { id }) {
                         <div role="group">
                             <label id="switch-configure-zfs-filesystem-cloneorigin" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.filesystem.cloneorigin ? `checked="checked"` : ``) + ` tabIndex="9" type="checkbox"><span class="switch-toggle"></span></label><span>Display Clone Origin in Tooltip</span>
                         </div>
+                        <div role="group">
+                            <label id="switch-configure-zfs-filesystem-quotarestrict" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.filesystem.quotarestrict ? `checked="checked"` : ``) + ` tabIndex="10" type="checkbox"><span class="switch-toggle"></span></label><span>Restrict quota maximum to size of storage pool</span>
+                        </div>
                         <label class="control-label">Status</label>
                         <div role="group">
-                            <label id="switch-configure-zfs-status-errorcolors" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.status.errorcolors ? `checked="checked"` : ``) + ` tabIndex="10" type="checkbox"><span class="switch-toggle"></span></label><span>Display warning and danger colors for error counts</span>
+                            <label id="switch-configure-zfs-status-errorcolors" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.status.errorcolors ? `checked="checked"` : ``) + ` tabIndex="11" type="checkbox"><span class="switch-toggle"></span></label><span>Display warning and danger colors for error counts</span>
                         </div>
                         <div role="group">
-                            <label id="switch-configure-zfs-status-trimunsupported" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.status.trimunsupported ? `checked="checked"` : ``) + ` tabIndex="10" type="checkbox"><span class="switch-toggle"></span></label><span>Display TRIM unsupported message</span>
+                            <label id="switch-configure-zfs-status-trimunsupported" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.status.trimunsupported ? `checked="checked"` : ``) + ` tabIndex="12" type="checkbox"><span class="switch-toggle"></span></label><span>Display TRIM unsupported message</span>
                         </div>
                         <label class="control-label">Storage Pool</label>
                         <div role="group">
-                            <label id="switch-configure-zfs-storagepool-boot" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.storagepool.boot ? `checked="checked"` : ``) + ` tabIndex="11" type="checkbox"><span class="switch-toggle"></span></label><span>Display boot storage pool</span>
+                            <label id="switch-configure-zfs-storagepool-boot" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.storagepool.boot ? `checked="checked"` : ``) + ` tabIndex="13" type="checkbox"><span class="switch-toggle"></span></label><span>Display boot storage pool</span>
                         </div>
                         <div class="` + (!zfsmanager.configuration.zfs.storagepool.boot ? `hidden` : ``) + `" role="group">
-                            <label id="switch-configure-zfs-storagepool-bootlockdown" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.storagepool.bootlockdown ? `checked="checked"` : ``) + ` tabIndex="12" type="checkbox"><span class="switch-toggle"></span></label><span>Prevent changes to boot storage pool</span>
+                            <label id="switch-configure-zfs-storagepool-bootlockdown" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.storagepool.bootlockdown ? `checked="checked"` : ``) + ` tabIndex="14" type="checkbox"><span class="switch-toggle"></span></label><span>Prevent changes to boot storage pool</span>
                         </div>
                         <div role="group">
-                            <label id="switch-configure-zfs-storagepool-root" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.storagepool.root ? `checked="checked"` : ``) + ` tabIndex="13" type="checkbox"><span class="switch-toggle"></span></label><span>Display root storage pool</span>
+                            <label id="switch-configure-zfs-storagepool-root" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.storagepool.root ? `checked="checked"` : ``) + ` tabIndex="15" type="checkbox"><span class="switch-toggle"></span></label><span>Display root storage pool</span>
                         </div>
                         <div role="group">
-                            <label id="switch-configure-zfs-storagepool-refreshall" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.storagepool.refreshall ? `checked="checked"` : ``) + ` tabIndex="14" type="checkbox"><span class="switch-toggle"></span></label><span>Refresh all components</span>
+                            <label id="switch-configure-zfs-storagepool-refreshall" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.storagepool.refreshall ? `checked="checked"` : ``) + ` tabIndex="16" type="checkbox"><span class="switch-toggle"></span></label><span>Refresh all components</span>
+                        </div>
+                        <label class="control-label">Updates</label>
+                        <div role="group">
+                            <label id="switch-configure-updates-check" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.updates.check ? `checked="checked"` : ``) + ` tabIndex="17" type="checkbox"><span class="switch-toggle"></span></label><span>Check for updates on launch</span>
                         </div>
                     </form>
                 </div>
@@ -12350,9 +13341,13 @@ function FnModalConfigureContent(modal = { id }) {
                         manage: $("#switch-configure-samba-manage input").prop("checked"),
                         windowscompatibility: $("#switch-configure-samba-windowscompatibility input").prop("checked")
                     },
+                    updates: {
+                        check: $("#switch-configure-updates-check input").prop("checked")
+                    },
                     zfs: {
                         filesystem: {
                             cloneorigin: $("#switch-configure-zfs-filesystem-cloneorigin input").prop("checked"),
+                            quotarestrict: $("#switch-configure-zfs-filesystem-quotarestrict input").prop("checked"),
                             readonlylockdown: $("#switch-configure-zfs-filesystem-readonlylockdown input").prop("checked"),
                             snapshotactions: $("#switch-configure-zfs-filesystem-snapshotactions input").prop("checked")
                         },
@@ -12370,7 +13365,7 @@ function FnModalConfigureContent(modal = { id }) {
                     }
                 };
 
-                FnConfigure({ cockpit: { manage: user.cockpit.manage }, disks: { base2: user.disks.base2 }, loglevel: user.loglevel, samba: { manage: user.samba.manage, windowscompatibility: user.samba.windowscompatibility }, zfs: { filesystem: { cloneorigin: user.zfs.filesystem.cloneorigin, readonlylockdown: user.zfs.filesystem.readonlylockdown, snapshotactions: user.zfs.filesystem.snapshotactions }, status: { errorcolors: user.zfs.status.errorcolors, trimunsupported: user.zfs.status.trimunsupported }, storagepool: { activetab: user.zfs.storagepool.activetab, boot: user.zfs.storagepool.boot, bootlockdown: user.zfs.storagepool.bootlockdown, refreshall: user.zfs.storagepool.refreshall, root: user.zfs.storagepool.root } } }, { name: "configure", welcome: false })
+                FnConfigure({ cockpit: { manage: user.cockpit.manage }, disks: { base2: user.disks.base2 }, loglevel: user.loglevel, samba: { manage: user.samba.manage, windowscompatibility: user.samba.windowscompatibility }, updates: { check: user.updates.check }, zfs: { filesystem: { cloneorigin: user.zfs.filesystem.cloneorigin, quotarestrict: user.zfs.filesystem.quotarestrict, readonlylockdown: user.zfs.filesystem.readonlylockdown, snapshotactions: user.zfs.filesystem.snapshotactions }, status: { errorcolors: user.zfs.status.errorcolors, trimunsupported: user.zfs.status.trimunsupported }, storagepool: { activetab: user.zfs.storagepool.activetab, boot: user.zfs.storagepool.boot, bootlockdown: user.zfs.storagepool.bootlockdown, refreshall: user.zfs.storagepool.refreshall, root: user.zfs.storagepool.root } } }, { name: "configure", welcome: false })
             });
 
             $("#dropdown-configure-zfs-storagepool-activetab").on("click", "li a", function () {
@@ -12444,7 +13439,7 @@ function FnModalWelcome() {
 }
 
 function FnModalWelcomeContent(modal = { id }) {
-    modal.content = `        
+    modal.content = `
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -12486,6 +13481,10 @@ function FnModalWelcomeContent(modal = { id }) {
                         </div>
                         <div role="group">
                             <label id="switch-welcome-zfs-storagepool-root" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.zfs.storagepool.root ? `checked="checked"` : ``) + ` tabIndex="7" type="checkbox"><span class="switch-toggle"></span></label><span>Display root storage pool</span>
+                        </div>
+                        <label class="control-label">Updates</label>
+                        <div role="group">
+                            <label id="switch-welcome-updates-check" class="onoff-ct privileged-modal"><input ` + (zfsmanager.configuration.updates.check ? `checked="checked"` : ``) + ` tabIndex="8" type="checkbox"><span class="switch-toggle"></span></label><span>Check for updates on launch</span>
                         </div>
                     </form>
                 </div>
@@ -12535,6 +13534,9 @@ function FnModalWelcomeContent(modal = { id }) {
                         manage: $("#switch-welcome-samba-manage input").prop("checked"),
                         windowscompatibility: $("#switch-welcome-samba-windowscompatibility input").prop("checked")
                     },
+                    updates: {
+                        check: $("#switch-welcome-updates-check input").prop("checked")
+                    },
                     zfs: {
                         storagepool: {
                             boot: $("#switch-welcome-zfs-storagepool-boot input").prop("checked"),
@@ -12544,7 +13546,7 @@ function FnModalWelcomeContent(modal = { id }) {
                     }
                 };
 
-                FnConfigure({ cockpit: { manage: user.cockpit.manage }, disks: { base2: ` + zfsmanager.configuration.disks.base2 + ` }, loglevel: user.loglevel, samba: { manage: user.samba.manage, windowscompatibility: user.samba.windowscompatibility }, zfs: { filesystem: { cloneorigin: ` + zfsmanager.configuration.zfs.filesystem.cloneorigin + `, readonlylockdown: ` + zfsmanager.configuration.zfs.filesystem.readonlylockdown + `, snapshotactions: ` + zfsmanager.configuration.zfs.filesystem.snapshotactions + ` }, status: { errorcolors: ` + zfsmanager.configuration.zfs.status.errorcolors + `, trimunsupported: ` + zfsmanager.configuration.zfs.status.trimunsupported + ` }, storagepool: { activetab: ` + zfsmanager.configuration.zfs.storagepool.activetab + `, boot: user.zfs.storagepool.boot, bootlockdown: user.zfs.storagepool.bootlockdown, refreshall: ` + zfsmanager.configuration.zfs.storagepool.refreshall + `, root: user.zfs.storagepool.root } } }, { name: "welcome", welcome: true })
+                FnConfigure({ cockpit: { manage: user.cockpit.manage }, disks: { base2: ` + zfsmanager.configuration.disks.base2 + ` }, loglevel: user.loglevel, samba: { manage: user.samba.manage, windowscompatibility: user.samba.windowscompatibility }, updates: { check: user.updates.check }, zfs: { filesystem: { cloneorigin: ` + zfsmanager.configuration.zfs.filesystem.cloneorigin + `, quotarestrict: ` + zfsmanager.configuration.zfs.filesystem.quotarestrict + `, readonlylockdown: ` + zfsmanager.configuration.zfs.filesystem.readonlylockdown + `, snapshotactions: ` + zfsmanager.configuration.zfs.filesystem.snapshotactions + ` }, status: { errorcolors: ` + zfsmanager.configuration.zfs.status.errorcolors + `, trimunsupported: ` + zfsmanager.configuration.zfs.status.trimunsupported + ` }, storagepool: { activetab: ` + zfsmanager.configuration.zfs.storagepool.activetab + `, boot: user.zfs.storagepool.boot, bootlockdown: user.zfs.storagepool.bootlockdown, refreshall: ` + zfsmanager.configuration.zfs.storagepool.refreshall + `, root: user.zfs.storagepool.root } } }, { name: "welcome", welcome: true })
             });
 
             $("#dropdown-welcome-zfs-storagepool-activetab").on("click", "li a", function () {
@@ -12579,7 +13581,7 @@ function FnModalStoragePoolsCreate() {
         \x3Cscript nonce="1t55lZ7tzuKTreHVNwE66Ox32Mc=">
             $("#btn-storagepools-create").on("click", function () {
                 FnModalStoragePoolsCreateContent({ id: $("#modal-storagepools-create") });
-                FnDisksAvailableGet({ wwn: true }, { name: "storagepools-create-disks", id: null, default: true });
+                FnDisksAvailableGet({ name: "storagepools-create-disks", id: null, default: true });
 
                 $("#input-storagepools-create-refreservation").val("10");
                 $("#validationwrapper-storagepools-create-refreservation .min-slider-handle").attr("tabindex", "1003");
@@ -12627,10 +13629,26 @@ function FnModalStoragePoolsCreateContent(modal = { id }) {
                         <div role="group">
                             <label id="switch-storagepools-create-disks-wwn" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="3" type="checkbox"><span class="switch-toggle"></span></label><span></span>
                         </div>
+                        <label id="controllabel-storagepools-create-disks-identifier" class="control-label hidden">Disks Identifier</label>
+                        <div id="validationwrapper-storagepools-create-disks-identifier" class="ct-validation-wrapper hidden">
+                            <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="4" type="button">
+                                    <span id="btnspan-storagepools-create-disks-identifier" class="pull-left" data-field-value="blockdevice">Block Device</span>
+                                    <div class="caret"></div>
+                                </button>
+                                <ul id="dropdown-storagepools-create-disks-identifier" class="dropdown-menu">
+                                    <li class="active" value="blockdevice"><a tabindex="-1">Block Device</a></li>
+                                    <li value="disk"><a tabindex="-1">Disk</a></li>
+                                    <li value="path"><a tabindex="-1">Hardware Path</a></li>
+                                    <li value="vdev"><a tabindex="-1">Virtual Device Mapping</a></li>
+                                </ul>
+                            </div>
+                        </div>
                         <label class="control-label">Disks <a data-placement="right" data-toggle="tooltip" tabindex="-1" title="Drives with 4 KiB physical sector size may report/emulate 512 B for backwards compatibility.<br><br>Configure the storage pool sector size to 4 KiB or above to optimise disk operation"><span class="fa fa-lg fa-info-circle"></span></a></label>
                         <div id="validationwrapper-storagepools-create-disks" class="ct-validation-wrapper" tabindex="-1">
                             <ul id="listgroup-storagepools-create-disks" class="list-group dialog-list-ct" data-field="disks" data-field-type="select-disks" tabIndex="-1"></ul>
-                            <span id="helpblock-storagepools-create-disks-wwnwarning" class="help-block"></span>
+                            <span id="helpblock-storagepools-create-disks-identifierwarning" class="help-block"></span>
+                            ` + (zfsmanager.zfs.warnings.nvmevdev ? `<span id="helpblock-storagepools-create-disks-identifierwarningzfs" class="help-block hidden">Virtual Device Mapping identifiers for NVMe devices may not have been created due to a bug in the <a href="https://github.com/zfsonlinux/zfs/issues/9730" target="_blank">ZFS software</a>. Update ZFS to 0.8.3 for fix.</span>` : ``) + `
                             <span id="helpblock-storagepools-create-disks-zfsmemberwarning" class="help-block"></span>
                             <span id="helpblock-storagepools-create-disks" class="help-block"></span>
                         </div>
@@ -12794,10 +13812,35 @@ function FnModalStoragePoolsCreateContent(modal = { id }) {
             });
 
             $("#switch-storagepools-create-disks-wwn input").on("click", function () {
-                $("#helpblock-storagepools-create-disks-wwnwarning").addClass("hidden").text("");
-                $("#helpblock-storagepools-create-disks-zfsmemberwarning").addClass("hidden").text("");
+                $("#btnspan-storagepools-create-disks-identifier").text("Block Device");
+                $("#dropdown-storagepools-create-disks-identifier li").siblings().removeClass("active");
+                $("#dropdown-storagepools-create-disks-identifier li[value='blockdevice']").addClass("active");
+                $("#helpblock-storagepools-create-disks-identifierwarning").addClass("hidden").text("");
+                ` + (zfsmanager.zfs.warnings.nvmevdev ? `$("#helpblock-storagepools-create-disks-identifierwarningzfs").addClass("hidden");` : ``) + `
 
-                FnDisksAvailableGet({ wwn: ($(this).prop("checked") ? true : false) }, { name: "storagepools-create-disks", id: null, default: false });
+                let disk = {
+                    identifier: ($(this).prop("checked") ? "wwn" : "blockdevice"),
+                    identifiertext: ($(this).prop("checked") ? "WWN" : "Block Device")
+                };
+
+                if ($(this).prop("checked")) {
+                    $("#controllabel-storagepools-create-disks-identifier").addClass("hidden");
+                    $("#validationwrapper-storagepools-create-disks-identifier").addClass("hidden");
+                } else {
+                    $("#controllabel-storagepools-create-disks-identifier").removeClass("hidden");
+                    $("#validationwrapper-storagepools-create-disks-identifier").removeClass("hidden");
+                }
+
+                $("#listgroup-storagepools-create-disks input[name='checkbox-storagepools-create-disks']").map(function () {
+                    if ($(this).attr("data-disk-id-" + disk.identifier)) {
+                        $(this).next().find(".select-ct-disk-row-id").text((disk.identifier == "blockdevice" ? "/dev/" : "") + $(this).attr("data-disk-id-" + disk.identifier));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-" + disk.identifier));
+                    } else {
+                        $(this).next().find(".select-ct-disk-row-id").text("/dev/" + $(this).attr("data-disk-id-blockdevice"));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-blockdevice"));
+                        $("#helpblock-storagepools-create-disks-identifierwarning").removeClass("hidden").text("One or more disks is missing a " + disk.identifiertext + " identifier.");
+                    }
+                });
             });
 
             $("#btn-storagepools-create-apply").on("click", function () {
@@ -12949,6 +13992,37 @@ function FnModalStoragePoolsCreateContent(modal = { id }) {
                 $(this).parent().addClass("active");
             });
 
+            $("#dropdown-storagepools-create-disks-identifier").on("click", "li a", function () {
+                $("#btnspan-storagepools-create-disks-identifier").text($(this).text()).attr("data-field-value", $(this).parent().attr("value"));
+                $(this).parent().siblings().removeClass("active");
+                $(this).parent().addClass("active");
+
+                $("#helpblock-storagepools-create-disks-identifierwarning").addClass("hidden").text("");
+                ` + (zfsmanager.zfs.warnings.nvmevdev ? `$("#helpblock-storagepools-create-disks-identifierwarningzfs").addClass("hidden");` : ``) + `
+
+                let disk = {
+                    identifier: $(this).parent().attr("value"),
+                    identifiertext: $(this).parent().text()
+                };
+
+                $("#listgroup-storagepools-create-disks input[name='checkbox-storagepools-create-disks']").map(function () {
+                    if ($(this).attr("data-disk-id-" + disk.identifier)) {
+                        $(this).next().find(".select-ct-disk-row-id").text((disk.identifier == "blockdevice" ? "/dev/" : "") + $(this).attr("data-disk-id-" + disk.identifier));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-" + disk.identifier));
+                    } else {
+                        $(this).next().find(".select-ct-disk-row-id").text("/dev/" + $(this).attr("data-disk-id-blockdevice"));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-blockdevice"));
+                        $("#helpblock-storagepools-create-disks-identifierwarning").removeClass("hidden").text("One or more disks is missing a " + disk.identifiertext + " identifier.");
+
+                        ` + (zfsmanager.zfs.warnings.nvmevdev ? `
+                        if (disk.identifier == "vdev" && /^nvme/gi.test($(this).attr("data-disk-id-blockdevice"))) {
+                            $("#helpblock-storagepools-create-disks-identifierwarningzfs").removeClass("hidden");
+                        }
+                        ` : ``) + `
+                    }
+                });
+            });
+
             $("#dropdown-storagepools-create-dedup").on("click", "li a", function () {
                 $("#btnspan-storagepools-create-dedup").text($(this).text()).attr("data-field-value", $(this).parent().attr("value"));
                 $(this).parent().siblings().removeClass("active");
@@ -13015,21 +14089,36 @@ function FnModalStoragePoolsImportContent(modal = { id }) {
                         </div>
                         <label class="control-label">Alt Root <a data-placement="right" data-toggle="tooltip" tabindex="-1" title="If set, this directory is prepended to any mount points within the pool.<br><br>This can be used when examining an unknown pool where the mount points cannot be trusted, or in an alternate boot environment, where the typical paths are not valid."><span class="fa fa-lg fa-info-circle"></span></a></label>
                         <div id="validationwrapper-storagepools-import-altroot" class="ct-validation-wrapper">
-                            <input id="input-storagepools-import-altroot" class="form-control privileged-modal" data-field="altroot" data-field-type="text-input" data-field-value="" tabindex="1003" type="text" value="">
+                            <input id="input-storagepools-import-altroot" class="form-control privileged-modal" data-field="altroot" data-field-type="text-input" data-field-value="" tabindex="1002" type="text" value="">
                             <span id="helpblock-storagepools-import-altroot" class="help-block"></span>
+                        </div>
+                        <label id="controllabel-storagepools-import-disks-identifier" class="control-label">Disks Identifier</label>
+                        <div id="validationwrapper-storagepools-import-disks-identifier" class="ct-validation-wrapper">
+                            <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="1003" type="button">
+                                    <span id="btnspan-storagepools-import-disks-identifier" class="pull-left" data-field-value="disk">Disk / WWN</span>
+                                    <div class="caret"></div>
+                                </button>
+                                <ul id="dropdown-storagepools-import-disks-identifier" class="dropdown-menu">
+                                    <li value="blockdevice"><a tabindex="-1">Block Device</a></li>
+                                    <li class="active" value="disk"><a tabindex="-1">Disk / WWN</a></li>
+                                    <li value="path"><a tabindex="-1">Hardware Path</a></li>
+                                    <li value="vdev"><a tabindex="-1">Virtual Device Mapping</a></li>
+                                </ul>
+                            </div>
                         </div>
                         <label class="control-label">Options</label>
                         <div role="group">
-                            <label id="switch-storagepools-import-wwn" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="1004" type="checkbox"><span class="switch-toggle"></span></label><span>Use WWN identifiers if possible</span>
+                            <label id="switch-storagepools-import-force" class="onoff-ct privileged-modal"><input tabIndex="1004" type="checkbox"><span class="switch-toggle"></span></label><span>Forcefully import storage pool</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepools-import-force" class="onoff-ct privileged-modal"><input tabIndex="1005" type="checkbox"><span class="switch-toggle"></span></label><span>Forcefully import storage pool</span>
+                            <label id="switch-storagepools-import-recoverymode" class="onoff-ct privileged-modal"><input tabIndex="1005" type="checkbox"><span class="switch-toggle"></span></label><span>Enable recovery mode</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepools-import-recoverymode" class="onoff-ct privileged-modal"><input tabIndex="1006" type="checkbox"><span class="switch-toggle"></span></label><span>Enable recovery mode</span>
+                            <label id="switch-storagepools-import-ignoremissinglog" class="onoff-ct privileged-modal"><input tabIndex="1006" type="checkbox"><span class="switch-toggle"></span></label><span>Ignore missing log device</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepools-import-ignoremissinglog" class="onoff-ct privileged-modal"><input tabIndex="1007" type="checkbox"><span class="switch-toggle"></span></label><span>Ignore missing log device</span>
+                            <label id="switch-storagepools-import-mount" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="1007" type="checkbox"><span class="switch-toggle"></span></label><span>Mount file systems</span>
                         </div>
                         <div role="group">
                             <label id="switch-storagepools-import-selinux" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="1008" type="checkbox"><span class="switch-toggle"></span></label><span>SELinux contexts for Samba</span>
@@ -13091,11 +14180,18 @@ function FnModalStoragePoolsImportContent(modal = { id }) {
                 $(this).prop("disabled", true);
 
                 let disks = {
-                    wwn: true
+                    id: {
+                        blockdevice: true,
+                        disk: false,
+                        path: false,
+                        vdev: false
+                    },
+                    identifier: ""
                 };
 
                 let filesystem = {
-                    selinux: ""
+                    mount: true,
+                    selinux: true
                 };
 
                 let pool = {
@@ -13121,7 +14217,9 @@ function FnModalStoragePoolsImportContent(modal = { id }) {
                     pool.guid.push($(this).attr("data-pool-import-guid"));
                     pool.name.push($(this).attr("data-pool-import-name"));
 
-                    disks.wwn = ($(this).attr("data-pool-import-wwn") == "true" && $("#switch-storagepools-import-wwn input").prop("checked") ? true : false);
+                    disks.id.disk = ($(this).attr("data-pool-import-id-disk") == "true" ? true : false);
+                    disks.id.path = ($(this).attr("data-pool-import-id-path") == "true" ? true : false);
+                    disks.id.vdev = ($(this).attr("data-pool-import-id-vdev") == "true" ? true : false);
                 });
 
                 if (pool.guid.length != 1) {
@@ -13312,6 +14410,9 @@ function FnModalStoragePoolsImportContent(modal = { id }) {
                 }
 
                 if (validation.altroot && validation.name && validation.namenew && validation.storagepools) {
+                    disks.identifier = $("#btnspan-storagepools-import-disks-identifier").attr("data-field-value");
+
+                    filesystem.mount = $("#switch-storagepools-import-mount input").prop("checked");
                     filesystem.selinux = $("#switch-storagepools-import-selinux input").prop("checked");
 
                     pool.altroot = $("#input-storagepools-import-altroot").val();
@@ -13322,9 +14423,15 @@ function FnModalStoragePoolsImportContent(modal = { id }) {
                     pool.readonly = $("#switch-storagepools-import-readonly input").prop("checked");
                     pool.recoverymode = $("#switch-storagepools-import-recoverymode input").prop("checked");
 
-                    FnStoragePoolImport({ name: pool.name, altroot: pool.altroot, destroyed: pool.destroyed, force: pool.force, guid: pool.guid, ignoremissinglog: pool.ignoremissinglog, namenew: pool.namenew, readonly: pool.readonly, recoverymode: pool.recoverymode }, { selinux: filesystem.selinux }, { wwn: disks.wwn });
+                    FnStoragePoolImport({ name: pool.name, altroot: pool.altroot, destroyed: pool.destroyed, force: pool.force, guid: pool.guid, ignoremissinglog: pool.ignoremissinglog, namenew: pool.namenew, readonly: pool.readonly, recoverymode: pool.recoverymode }, { mount: filesystem.mount, selinux: filesystem.selinux }, { id: { blockdevice: disks.id.blockdevice, disk: disks.id.disk, path: disks.id.path, vdev: disks.id.vdev }, identifier: disks.identifier });
                 }
 			});
+
+            $("#dropdown-storagepools-import-disks-identifier").on("click", "li a", function () {
+                $("#btnspan-storagepools-import-disks-identifier").text($(this).text()).attr("data-field-value", $(this).parent().attr("value"));
+                $(this).parent().siblings().removeClass("active");
+                $(this).parent().addClass("active");
+            });
         \x3C/script>
     `;
 
@@ -13379,7 +14486,7 @@ function FnModalStoragePoolConfigureContent(pool = { name, id, guid, readonly: f
                         <label class="control-label">Sector Size</label>
                         <div class="ct-validation-wrapper">
                             <div id="div-storagepool-configure-ashift-dropdown-` + pool.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="3" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="2" type="button">
                                     <span id="btnspan-storagepool-configure-ashift-` + pool.id + `" class="pull-left" data-field-value="" data-field-value-new="">Auto Detect</span>
                                     <div class="caret"></div>
                                 </button>
@@ -13397,7 +14504,7 @@ function FnModalStoragePoolConfigureContent(pool = { name, id, guid, readonly: f
                         <label class="control-label">Fail Mode</label>
                         <div class="ct-validation-wrapper">
                             <div id="div-storagepool-configure-failmode-dropdown-` + pool.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="4" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="3" type="button">
                                     <span id="btnspan-storagepool-configure-failmode-` + pool.id + `" class="pull-left" data-field-value="" data-field-value-new="">Wait</span>
                                     <div class="caret"></div>
                                 </button>
@@ -13410,28 +14517,28 @@ function FnModalStoragePoolConfigureContent(pool = { name, id, guid, readonly: f
                         </div>
                         <label id="controllabel-storagepool-configure-options-` + pool.id + `" class="control-label">Options</label>
                         <div role="group">
-                            <label id="switch-storagepool-configure-autoexpand-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="5" type="checkbox"><span class="switch-toggle"></span></label><span>Automatically expand storage pool when larger devices are added</span>
+                            <label id="switch-storagepool-configure-autoexpand-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="4" type="checkbox"><span class="switch-toggle"></span></label><span>Automatically expand storage pool when larger devices are added</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepool-configure-autoreplace-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="6" type="checkbox"><span class="switch-toggle"></span></label><span>Automatically replace devices</span>
+                            <label id="switch-storagepool-configure-autoreplace-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="5" type="checkbox"><span class="switch-toggle"></span></label><span>Automatically replace devices</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepool-configure-autotrim-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="7" type="checkbox"><span class="switch-toggle"></span></label><span>Automatic TRIM</span>
+                            <label id="switch-storagepool-configure-autotrim-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="6" type="checkbox"><span class="switch-toggle"></span></label><span>Automatic TRIM</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepool-configure-delegation-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input checked="checked" tabIndex="8" type="checkbox"><span class="switch-toggle"></span></label><span>Allow non-priveleged user access based on the dataset permissions</span>
+                            <label id="switch-storagepool-configure-delegation-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input checked="checked" tabIndex="7" type="checkbox"><span class="switch-toggle"></span></label><span>Allow non-priveleged user access based on the dataset permissions</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepool-configure-listsnapshots-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="9" type="checkbox"><span class="switch-toggle"></span></label><span>Display snapshots in file systems listing</span>
+                            <label id="switch-storagepool-configure-listsnapshots-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="8" type="checkbox"><span class="switch-toggle"></span></label><span>Display snapshots in file systems listing</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepool-configure-multihost-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="10" type="checkbox"><span class="switch-toggle"></span></label><span>Multi host</span>
+                            <label id="switch-storagepool-configure-multihost-` + pool.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="9" type="checkbox"><span class="switch-toggle"></span></label><span>Multi host</span>
                         </div>
                         <label id="controllabel-storagepool-configure-hostid-` + pool.id + `" class="control-label hidden">Host ID</label>
                         <div id="validationwrapper-storagepool-configure-hostid-` + pool.id + `" class="ct-validation-wrapper hidden">
-                            <div class="alert alert-warning"><span class="pficon pficon-warning-triangle-o"></span><span>Host ID does not exist.</span></div>
+                            ` + FnDisplayInlineAlert({ status: "warning", title: "Host ID does not exist.", description: null }, { name: null, id: null, hidden: false }) + `
                             <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="11" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="10" type="button">
                                     <span id="btnspan-storagepool-configure-hostid-` + pool.id + `" class="pull-left" data-field-value="">Use Lib C Generated Host ID</span>
                                     <div class="caret"></div>
                                 </button>
@@ -13593,7 +14700,7 @@ function FnModalStoragePoolConfigureContent(pool = { name, id, guid, readonly: f
     modal.id.empty().append(modal.content);
 }
 
-function FnModalStoragePoolConfigureFeatures(pool = { name, id, boot: false, readonly: false, version }) {
+function FnModalStoragePoolConfigureFeatures(pool = { name, id, boot: false, readonly: false }) {
     let modal = {
         window: ""
     };
@@ -13603,7 +14710,7 @@ function FnModalStoragePoolConfigureFeatures(pool = { name, id, boot: false, rea
 
         \x3Cscript nonce="1t55lZ7tzuKTreHVNwE66Ox32Mc=">
             $("#btn-storagepool-configure-features-` + pool.id + `").on("click", function () {
-                FnModalStoragePoolConfigureFeaturesContent({ name: "` + pool.name + `", id: "` + pool.id + `", boot: ` + pool.boot + `, readonly: ` + pool.readonly + `, version: "` + pool.version + `" }, { id: $("#modal-storagepool-configure-features-` + pool.id + `") });
+                FnModalStoragePoolConfigureFeaturesContent({ name: "` + pool.name + `", id: "` + pool.id + `", boot: ` + pool.boot + `, readonly: ` + pool.readonly + ` }, { id: $("#modal-storagepool-configure-features-` + pool.id + `") });
                 FnStoragePoolConfigurationFeaturesGet({ name: "` + pool.name + `", id: "` + pool.id + `", boot: ` + pool.boot + ` }, { name: "storagepool-configure-features", id: "` + pool.id + `" });
             });
         \x3C/script>
@@ -13612,7 +14719,9 @@ function FnModalStoragePoolConfigureFeatures(pool = { name, id, boot: false, rea
     $("#modals-storagepool-" + pool.id).append(modal.window);
 }
 
-function FnModalStoragePoolConfigureFeaturesContent(pool = { name, id, boot: false, readonly: false, version }, modal = { id }) {
+function FnModalStoragePoolConfigureFeaturesContent(pool = { name, id, boot: false, readonly: false }, modal = { id }) {
+    pool.version = $("#tr-storagepool-" + pool.id).attr("data-pool-version");
+
     modal.content = `
         <div class="modal-dialog">
             <div class="modal-content">
@@ -13621,8 +14730,8 @@ function FnModalStoragePoolConfigureFeaturesContent(pool = { name, id, boot: fal
                 </div>
                 <div class="modal-body">
                     <div class="modal-ct-bodytext-1">Pool: ` + pool.name + `</div>
-                    ` + (pool.boot ? `<div class="alert alert-warning"><span class="pficon pficon-warning-triangle-o"></span><span class="features-message">Changes to the boot storage pool may cause an unbootable system.</span></div>` : ``) + `
-                    <div id="alert-storagepool-configure-features-compatibility-` + pool.id + `" class="alert alert-info hidden"><span class="pficon pficon-info"></span><span>` + ($.isNumeric(pool.version) ? `The storage pool will no longer be accessible on software that does not support feature flags.` : `Once a feature is enabled the pool may become incompatible with software that does not support the feature.`) + ` Features can not be disabled once they have been enabled.</span></div>
+                    ` + (pool.boot ? FnDisplayInlineAlert({ status: "danger", title: "Changes to the boot storage pool may cause an unbootable system.", description: null }, { name: null, id: null, hidden: false }) : ``) + `
+                    ` + FnDisplayInlineAlert({ status: ($.isNumeric(pool.version) ? "danger" : "warning"), title: ($.isNumeric(pool.version) ? "The storage pool will no longer be accessible on software that does not support feature flags." : "Once a feature is enabled the pool may become incompatible with software that does not support the feature.") + " Features can not be disabled once they have been enabled.", description: null }, { name: "storagepool-configure-features-compatibility", id: pool.id, hidden: true }) + `
                     <form class="ct-form ct-form-spacing">
                         <label class="control-label">Allocation Classes</label>
                         <div class="ct-form-split" role="group">
@@ -13737,7 +14846,7 @@ function FnModalStoragePoolConfigureFeaturesContent(pool = { name, id, boot: fal
 	                </div>
                     <div class="modal-ct-buttons">
                         <button class="btn btn-default cancel" data-dismiss="modal" tabindex="-1">Cancel</button>
-                        <button id="btn-storagepool-configure-features-apply-` + pool.id + `" class="btn btn-` + (pool.boot ? `danger` : `warning`) + ` apply privileged-modal" tabindex="-1">Configure</button>
+                        <button id="btn-storagepool-configure-features-apply-` + pool.id + `" class="btn btn-` + ($.isNumeric(pool.version) || pool.boot ? `danger` : `warning`) + ` apply privileged-modal" tabindex="-1">Configure</button>
                     </div>
                 </div>
             </div>
@@ -14111,6 +15220,8 @@ function FnModalFileSystemsCreate(pool = { name, id, altroot: false, feature: { 
                 FnFileSystemsNamesGet({ name: "` + pool.name + `", id: "` + pool.id + `" }, { existing: { name: null, clone: false, encryption: false, encryptionroot: null, origin: null}, override: true }, { dropdown: { id: $("#dropdown-storagepool-filesystems-create-parentfilesystem-` + pool.id + `"), selected: "` + pool.name + `" } });
                 FnFileSystemConfigurationInheritedGet({ name: "` + pool.name + `", id: "` + pool.id + `" }, { name: "` + pool.name + `" }, { name: "storagepool-filesystems-create", id: "` + pool.id + `" });
 
+                $("#input-storagepool-filesystems-create-quota-` + pool.id + `").val("0");
+                $("#validationwrapper-storagepool-filesystems-create-quota-` + pool.id + ` .min-slider-handle").attr("tabindex", "15");
                 setTimeout(function() {
                     $("#input-storagepool-filesystems-create-name-` + pool.id + `").focus();
                 }, 600);
@@ -14153,7 +15264,7 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         </div>
                         <label id="controllabel-storagepool-filesystems-create-encryption-passphrase-` + pool.id + `" class="control-label hidden">Passphrase <a data-placement="right" data-toggle="tooltip" tabindex="-1" title="Alphanumerical characters are allowed with the addition of whitespaces and standard keyboard special characters @%+\\/'!#$^?:,(){}[]~\`-_.<br><br>Minimum of 8 characters required.<br><br>Passphrase is not required if parent file system is encrypted."><span class="fa fa-lg fa-info-circle"></span></a></label>
                         <div id="validationwrapper-storagepool-filesystems-create-encryption-passphrase-` + pool.id + `" class="ct-validation-wrapper hidden">
-                            <div id="alert-storagepool-filesystems-create-encryption-` + pool.id + `" class="alert alert-warning ` + (pool.feature.encryption ? `hidden` : ``) + `"><span class="pficon pficon-warning-triangle-o"></span><span>Encryption feature flag is not enabled on storage pool.</span></div>
+                            ` + (!pool.feature.encryption ? FnDisplayInlineAlert({ status: "warning", title: "Encryption feature flag is not enabled on storage pool.", description: null }, { name: "storagepool-filesystems-create-encryption", id: pool.id, hidden: false }) : ``) + `
                             <input id="input-storagepool-filesystems-create-encryption-passphrase-` + pool.id + `" class="form-control privileged-modal" data-field="encryption-passphrase" data-field-type="text-input" tabindex="4" type="password" value="">
                             <span id="helpblock-storagepool-filesystems-create-encryption-passphrase-` + pool.id + `" class="help-block"></span>
                         </div>
@@ -14183,7 +15294,7 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         <label class="control-label">Access Time</label>
                         <div class="ct-validation-wrapper">
                             <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="8" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="7" type="button">
                                     <span id="btnspan-storagepool-filesystems-create-atime-` + pool.id + `" class="pull-left" data-field-value="on">On</span>
                                     <div class="caret"></div>
                                 </button>
@@ -14197,7 +15308,7 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         <label class="control-label">Case Sensitivity</label>
                         <div class="ct-validation-wrapper">
                             <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="7" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="8" type="button">
                                     <span id="btnspan-storagepool-filesystems-create-casesensitivity-` + pool.id + `" class="pull-left" data-field-value="sensitive">Sensitive</span>
                                     <div class="caret"></div>
                                 </button>
@@ -14212,7 +15323,7 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         <label class="control-label">Compression</label>
                         <div class="ct-validation-wrapper">
                             <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="8" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="9" type="button">
                                     <span id="btnspan-storagepool-filesystems-create-compression-` + pool.id + `" class="pull-left" data-field-value="off">Off</span>
                                     <div class="caret"></div>
                                 </button>
@@ -14230,7 +15341,7 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         <label id="controllabel-storagepool-filesystems-create-dedup-` + pool.id + `" class="control-label">Deduplication</label>
                         <div id="validationwrapper-storagepool-filesystems-create-dedup-` + pool.id + `" class="ct-validation-wrapper">
                             <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="9" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="10" type="button">
                                     <span id="btnspan-storagepool-filesystems-create-dedup-` + pool.id + `" class="pull-left" data-field-value="off">Off</span>
                                     <div class="caret"></div>
                                 </button>
@@ -14252,7 +15363,7 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         <label id="controllabel-storagepool-filesystems-create-dnodesize-` + pool.id + `" class="control-label ` + (!pool.feature.large_dnode ? `hidden` : ``) + `">DNode Size</label>
                         <div id="validationwrapper-storagepool-filesystems-create-dnodesize-` + pool.id + `" class="ct-validation-wrapper ` + (!pool.feature.large_dnode ? `hidden` : ``) + `">
                             <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="9" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="11" type="button">
                                     <span id="btnspan-storagepool-filesystems-create-dnodesize-` + pool.id + `" class="pull-left" data-field-value="legacy">Legacy</span>
                                     <div class="caret"></div>
                                 </button>
@@ -14271,7 +15382,7 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         <label id="controllabel-storagepool-filesystems-create-xattr-` + pool.id + `" class="control-label">Extended Attributes</label>
                         <div class="ct-validation-wrapper">
                             <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="8" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="12" type="button">
                                     <span id="btnspan-storagepool-filesystems-create-xattr-` + pool.id + `" class="pull-left" data-field-value="on">On</span>
                                     <div class="caret"></div>
                                 </button>
@@ -14285,18 +15396,38 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         </div>
                         <label class="control-label">NFS Share</label>
                         <div role="group">
-                            <label id="switch-storagepool-filesystems-create-sharenfs-` + pool.id + `" class="onoff-ct privileged-modal"><input tabIndex="10" type="checkbox"><span class="switch-toggle"></span></label><span></span>
+                            <label id="switch-storagepool-filesystems-create-sharenfs-` + pool.id + `" class="onoff-ct privileged-modal"><input tabIndex="13" type="checkbox"><span class="switch-toggle"></span></label><span></span>
                         </div>
                         <label id="controllabel-storagepool-filesystems-create-sharenfs-options-` + pool.id + `" class="control-label hidden">NFS Options</label>
                         <div id="validationwrapper-storagepool-filesystems-create-sharenfs-options-` + pool.id + `" class="ct-validation-wrapper hidden">
-                            <div id="alert-storagepool-filesystems-create-sharenfs-options-` + pool.id + `" class="alert alert-warning hidden"><span class="pficon pficon-warning-triangle-o"></span><span>NFS is not installed.</span></div>
-                            <input id="input-storagepool-filesystems-create-sharenfs-options-` + pool.id + `" class="form-control privileged-modal" data-field="sharenfs" data-field-type="text-input" tabindex="11" type="text" value="sec=sys,rw,crossmnt,no_subtree_check,no_root_squash">
+                            ` + FnDisplayInlineAlert({ status: "warning", title: "NFS is not installed.", description: null }, { name: "storagepool-filesystems-create-sharenfs-options", id: pool.id, hidden: true }) + `
+                            <input id="input-storagepool-filesystems-create-sharenfs-options-` + pool.id + `" class="form-control privileged-modal" data-field="sharenfs" data-field-type="text-input" tabindex="14" type="text" value="sec=sys,rw,crossmnt,no_subtree_check,no_root_squash">
                             <span id="helpblock-storagepool-filesystems-create-sharenfs-options-` + pool.id + `" class="help-block"></span>
+                        </div>
+                        <label class="control-label">Quota</label>
+                        <div id="validationwrapper-storagepool-filesystems-create-quota-` + pool.id + `" class="ct-validation-wrapper">
+                            <div class="slider-pf">
+                                <input id="slider-storagepool-filesystems-create-quota-` + pool.id + `" data-provide="slider" data-slider-max="1000" data-slider-min="0" data-slider-tooltip="hide" data-slider-value="0" disabled="true" tabIndex="-1" type="text">
+                                <input id="input-storagepool-filesystems-create-quota-` + pool.id + `" class="slider-input-pf size-ct-text form-control privileged-modal" data-field-value="" maxlength="6" tabIndex="16" type="text">
+                                <div id="div-storagepool-filesystems-create-quota-dropdown-` + pool.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
+                                    <button aria-expanded="false" class="btn btn-default dropdown-toggle size-ct-unit" data-toggle="dropdown" tabIndex="17" type="button">
+                                        <span id="btnspan-storagepool-filesystems-create-quota-` + pool.id + `" class="pull-left" data-field-value="">KiB</span>
+                                        <div class="caret"></div>
+                                    </button>
+                                    <ul id="dropdown-storagepool-filesystems-create-quota-` + pool.id + `" class="dropdown-menu">
+                                        <li class="active" value="KiB"><a tabindex="-1">KiB</a></li>
+                                        <li class="hidden" value="MiB"><a tabindex="-1">MiB</a></li>
+                                        <li class="hidden" value="GiB"><a tabindex="-1">GiB</a></li>
+                                        <li class="hidden" value="TiB"><a tabindex="-1">TiB</a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <span id="helpblock-storagepool-filesystems-create-quota-` + pool.id + `" class="help-block"></span>
                         </div>
                         <label class="control-label">Record Size</label>
                         <div class="ct-validation-wrapper">
                             <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="12" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="18" type="button">
                                     <span id="btnspan-storagepool-filesystems-create-recordsize-` + pool.id + `" class="pull-left" data-field-value="131072">128 KiB</span>
                                     <div class="caret"></div>
                                 </button>
@@ -14319,9 +15450,9 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         </div>
                         <label class="control-label ` + ((!pool.feature.allocation_classes || $("#tr-storagepool-" + pool.id).attr("data-pool-special") === "false") ? `hidden` : ``) + `">Special Small Blocks</label>
                         <div class="ct-validation-wrapper ` + ((!pool.feature.allocation_classes || $("#tr-storagepool-" + pool.id).attr("data-pool-special") === "false") ? `hidden` : ``) + `">
-                            <div id="alert-storagepool-filesystems-create-special_small_blocks-` + pool.id + `" class="alert alert-warning ` + (pool.feature.allocation_classes ? `hidden` : ``) + `"><span class="pficon pficon-warning-triangle-o"></span><span>Allocation Classes feature flag is not enabled on storage pool.</span></div>
+                            ` + FnDisplayInlineAlert({ status: "warning", title: "Allocation Classes feature flag is not enabled on storage pool.", description: null }, { name: "storagepool-filesystems-create-special_small_blocks", id: pool.id, hidden: true }) + `
                             <div id="div-storagepool-filesystems-create-special_small_blocks-dropdown-` + pool.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="11" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="19" type="button">
                                     <span id="btnspan-storagepool-filesystems-create-special_small_blocks-` + pool.id + `" class="pull-left" data-field-value="0">0 B</span>
                                     <div class="caret"></div>
                                 </button>
@@ -14342,13 +15473,13 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         </div>
                         <label class="control-label">Options</label>
                         <div role="group">
-                            <label id="switch-storagepool-filesystems-create-selinux-` + pool.id + `" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="14" type="checkbox"><span class="switch-toggle"></span></label><span>SELinux contexts for Samba</span>
+                            <label id="switch-storagepool-filesystems-create-selinux-` + pool.id + `" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="20" type="checkbox"><span class="switch-toggle"></span></label><span>SELinux contexts for Samba</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepool-filesystems-create-samba-share-` + pool.id + `" class="onoff-ct privileged-modal"><input tabIndex="15" type="checkbox"><span class="switch-toggle"></span></label><span>Enable Samba share</span>
+                            <label id="switch-storagepool-filesystems-create-samba-share-` + pool.id + `" class="onoff-ct privileged-modal"><input tabIndex="21" type="checkbox"><span class="switch-toggle"></span></label><span>Enable Samba share</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepool-filesystems-create-readonly-` + pool.id + `" class="onoff-ct privileged-modal"><input tabIndex="16" type="checkbox"><span class="switch-toggle"></span></label><span>Read only</span>
+                            <label id="switch-storagepool-filesystems-create-readonly-` + pool.id + `" class="onoff-ct privileged-modal"><input tabIndex="22" type="checkbox"><span class="switch-toggle"></span></label><span>Read only</span>
                         </div>
                     </form>
                 </div>
@@ -14366,6 +15497,60 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
         </div>
 
         \x3Cscript nonce="1t55lZ7tzuKTreHVNwE66Ox32Mc=">
+            $("#input-storagepool-filesystems-create-quota-` + pool.id + `").tooltip({ trigger: "manual" })
+                .on("keyup", function (element) {
+                    let $this = $(this);
+                    let sd = $this.siblings("[data-provide=slider]").slider();
+
+                    if ($this.val().trim() && !$.isNumeric(this.value)) {
+                        this.value = sd.slider("getValue");
+                    }
+                })
+                .on("keypress blur", function (element) {
+                    if (element.which == 13 || element.type === "blur") {
+                        element.preventDefault();
+
+                        let $this = $(this);
+                        let sd = $this.siblings("[data-provide=slider]").slider();
+                        let max = sd.slider("getAttribute", "max");
+                        let min = sd.slider("getAttribute", "min");
+
+                        if (!$.isNumeric(this.value) || (this.value > max || this.value < min)) {
+                            let warningInfo = $.isNumeric(this.value) ? "Valid value should be between " + min + " and " + max : "Valid value should be number";
+                            $this.attr("data-original-title", warningInfo).tooltip("show").addClass("warning");
+                            this.value = sd.slider("getValue");
+                            setTimeout(function () {
+                                $this.tooltip("hide");
+                            }, 3000);
+                        } else {
+                            if ($this.is(".warning")) {
+                                $this.tooltip("hide");
+                            }
+
+                            this.value = $this.val().trim();
+                            sd.slider("setValue", this.value);
+                        }
+                    }
+                })
+                .siblings("[data-provide=slider]").each(function () {
+                    $("#input-storagepool-filesystems-create-quota-` + pool.id + `").val(this.value);
+                    $(this).slider().on("change", function (element) {
+                        $("#input-storagepool-filesystems-create-quota-` + pool.id + `").val(element.value.newValue);
+                    });
+                });
+
+            $("#input-storagepool-filesystems-create-quota-` + pool.id + `").on("change textInput input", function (element) {
+                if ($(this).val() > 1000) { //Force reset to maximum allowed value
+                    $(this).val(1000);
+                } else if ($(this).val() < 0) { //Force reset to minimum allowed value
+                    $(this).val(0);
+                }
+
+                if ($.isNumeric($(this).val())) {
+                    $("#slider-storagepool-filesystems-create-quota-` + pool.id + `").slider("setValue", $(this).val());
+                }
+            });
+
             $("#switch-storagepool-filesystems-create-encryption-` + pool.id + ` input").on("click", function () {
                 $("#validationwrapper-storagepool-filesystems-create-encryption-passphrase-` + pool.id + `").removeClass("has-error");
                 $("#helpblock-storagepool-filesystems-create-encryption-passphrase-` + pool.id + `").removeClass("has-error").addClass("hidden").text("");
@@ -14421,6 +15606,7 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         dnodesize: "",
                         encryption: "",
                         passphrase: "",
+                        quota: "none",
                         readonly: "",
                         recordsize: "",
                         selinux: "",
@@ -14570,7 +15756,13 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                         filesystem.sharenfs = "off";
                     }
 
-                    FnFileSystemCreate({ name: "` + pool.name + `", id: "` + pool.id + `", altroot: ` + pool.altroot + ` }, { name: filesystem.name, id: filesystem.id, atime: filesystem.atime, casesensitivity: filesystem.casesensitivity, cipher: filesystem.cipher, compression: filesystem.compression, dedup: filesystem.dedup, dnodesize: filesystem.dnodesize, encryption: filesystem.encryption, passphrase: filesystem.passphrase, readonly: filesystem.readonly, recordsize: filesystem.recordsize, selinux: filesystem.selinux, sharenfs: filesystem.sharenfs, sharesmb: filesystem.sharesmb, special_small_blocks: filesystem.special_small_blocks, xattr: filesystem.xattr });
+                    if ($("#input-storagepool-filesystems-create-quota-` + pool.id + `").val() > 0) { //Remove friendly text so final value is sent
+                        filesystem.quota = $("#input-storagepool-filesystems-create-quota-` + pool.id + `").val() + $("#btnspan-storagepool-filesystems-create-quota-` + pool.id + `").attr("data-field-value").replace(/iB$/g, "");
+                    } else {
+                        filesystem.quota = "none";
+                    }
+
+                    FnFileSystemCreate({ name: "` + pool.name + `", id: "` + pool.id + `", altroot: ` + pool.altroot + ` }, { name: filesystem.name, id: filesystem.id, atime: filesystem.atime, casesensitivity: filesystem.casesensitivity, cipher: filesystem.cipher, compression: filesystem.compression, dedup: filesystem.dedup, dnodesize: filesystem.dnodesize, encryption: filesystem.encryption, passphrase: filesystem.passphrase, quota: filesystem.quota, readonly: filesystem.readonly, recordsize: filesystem.recordsize, selinux: filesystem.selinux, sharenfs: filesystem.sharenfs, sharesmb: filesystem.sharesmb, special_small_blocks: filesystem.special_small_blocks, xattr: filesystem.xattr });
                 }
 			});
 
@@ -14616,6 +15808,25 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                 $("#btnspan-storagepool-filesystems-create-encryption-cipher-` + pool.id + `").text($(this).text()).attr("data-field-value", $(this).parent().attr("value"));
                 $(this).parent().siblings().removeClass("active");
                 $(this).parent().addClass("active");
+			});
+
+            $("#dropdown-storagepool-filesystems-create-quota-` + pool.id + `").on("click", "li a", function () {
+                $("#btnspan-storagepool-filesystems-create-quota-` + pool.id + `").text($(this).text()).attr("data-field-value", $(this).text());
+                $(this).parent().siblings().removeClass("active");
+                $(this).parent().addClass("active");
+
+                let size = {
+                    slider: {
+                        value: $("#input-storagepool-filesystems-create-quota-` + pool.id + `").val(),
+                        valuemax: $("#input-storagepool-filesystems-create-quota-` + pool.id + `").attr("data-filesystem-quota-max-" + $(this).text().toLowerCase())
+                    }
+                };
+
+                $("#slider-storagepool-filesystems-create-quota-` + pool.id + `").data("slider").options.max = size.slider.valuemax;
+                $("#slider-storagepool-filesystems-create-quota-` + pool.id + `").data("slider").options.step = (size.slider.valuemax < 10 ? "0.1" : "1");
+                $("#slider-storagepool-filesystems-create-quota-` + pool.id + `").slider("setValue", 0); //Force display update
+                $("#slider-storagepool-filesystems-create-quota-` + pool.id + `").slider("setValue", size.slider.value);
+                $("#input-storagepool-filesystems-create-quota-` + pool.id + `").val($("#slider-storagepool-filesystems-create-quota-` + pool.id + `").data("slider").getValue());
 			});
 
             $("#dropdown-storagepool-filesystems-create-recordsize-` + pool.id + `").on("click", "li a", function () {
@@ -14945,8 +16156,10 @@ function FnModalFileSystemConfigure(pool = { name, id, altroot: false, feature: 
                 FnFileSystemConfigurationGet({ name: "` + pool.name + `", id: "` + pool.id + `", readonly: ` + pool.readonly + ` }, { name: "` + filesystem.name + `", id: "` + filesystem.id + `" }, { name: "storagepool-filesystem-configure", id: "` + filesystem.id + `" });
                 ` + (pool.altroot ? `FnStoragePoolAlternativeRootGet({ name: "` + pool.name + `", id: "` + pool.id + `" }, { name: "storagepool-filesystem-configure", id: "` + filesystem.id + `" });` : ``) + `
 
+                $("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").val("0");
+                $("#validationwrapper-storagepool-filesystem-configure-quota-` + filesystem.id + ` .min-slider-handle").attr("tabindex", "14");
                 $("#input-storagepool-filesystem-configure-refreservation-` + filesystem.id + `").val("0");
-                $("#validationwrapper-storagepool-filesystem-configure-refreservation-` + filesystem.id + ` .min-slider-handle").attr("tabindex", "12");
+                $("#validationwrapper-storagepool-filesystem-configure-refreservation-` + filesystem.id + ` .min-slider-handle").attr("tabindex", "18");
             });
 	    \x3C/script>
     `;
@@ -15009,7 +16222,7 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         <label id="controllabel-storagepool-filesystem-configure-atime-` + filesystem.id + `" class="control-label">Access Time</label>
                         <div id="validationwrapper-storagepool-filesystem-configure-atime-` + filesystem.id + `" class="ct-validation-wrapper">
                             <div id="div-storagepool-filesystem-configure-atime-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="3" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="4" type="button">
                                     <span id="btnspan-storagepool-filesystem-configure-atime-` + filesystem.id + `" class="pull-left" data-field-value="" data-field-value-new="">Off</span>
                                     <div class="caret"></div>
                                 </button>
@@ -15024,7 +16237,7 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         <label id="controllabel-storagepool-filesystem-configure-canmount-` + filesystem.id + `" class="control-label">Can Mount</label>
                         <div id="validationwrapper-storagepool-filesystem-configure-canmount-` + filesystem.id + `" class="ct-validation-wrapper">
                             <div id="div-storagepool-filesystem-configure-canmount-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="4" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="5" type="button">
                                     <span id="btnspan-storagepool-filesystem-configure-canmount-` + filesystem.id + `" class="pull-left" data-field-value="" data-field-value-new="">On</span>
                                     <div class="caret"></div>
                                 </button>
@@ -15040,7 +16253,7 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         <label id="controllabel-storagepool-filesystem-configure-checksum-` + filesystem.id + `" class="control-label">Checksum</label>
                         <div id="validationwrapper-storagepool-filesystem-configure-checksum-` + filesystem.id + `" class="ct-validation-wrapper">
                             <div id="div-storagepool-filesystem-configure-checksum-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="5" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="6" type="button">
                                     <span id="btnspan-storagepool-filesystem-configure-checksum-` + filesystem.id + `" class="pull-left" data-field-value="" data-field-value-new="">On</span>
                                     <div class="caret"></div>
                                 </button>
@@ -15062,7 +16275,7 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         <label class="control-label">Compression</label>
                         <div class="ct-validation-wrapper">
                             <div id="div-storagepool-filesystem-configure-compression-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="6" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="7" type="button">
                                     <span id="btnspan-storagepool-filesystem-configure-compression-` + filesystem.id + `" class="pull-left" data-field-value="" data-field-value-new="">Off</span>
                                     <div class="caret"></div>
                                 </button>
@@ -15081,7 +16294,7 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         <label id="controllabel-storagepool-filesystem-configure-dedup-` + filesystem.id + `" class="control-label">Deduplication</label>
                         <div id="validationwrapper-storagepool-filesystem-configure-dedup-` + filesystem.id + `" class="ct-validation-wrapper">
                             <div id="div-storagepool-filesystem-configure-dedup-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="7" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="8" type="button">
                                     <span id="btnspan-storagepool-filesystem-configure-dedup-` + filesystem.id + `" class="pull-left" data-field-value="" data-field-value-new="">Off</span>
                                     <div class="caret"></div>
                                 </button>
@@ -15104,7 +16317,7 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         <label id="controllabel-storagepool-filesystem-configure-dnodesize-` + filesystem.id + `" class="control-label ` + (!pool.feature.large_dnode ? `hidden` : ``) + `">DNode Size</label>
                         <div id="validationwrapper-storagepool-filesystem-configure-dnodesize-` + filesystem.id + `" class="ct-validation-wrapper ` + (!pool.feature.large_dnode ? `hidden` : ``) + `">
                             <div id="div-storagepool-filesystem-configure-dnodesize-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="7" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="9" type="button">
                                     <span id="btnspan-storagepool-filesystem-configure-dnodesize-` + filesystem.id + `" class="pull-left" data-field-value="" data-field-value-new="">Legacy</span>
                                     <div class="caret"></div>
                                 </button>
@@ -15128,7 +16341,7 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         <label id="controllabel-storagepool-filesystem-configure-xattr-` + filesystem.id + `" class="control-label">Extended Attributes</label>
                         <div id="validationwrapper-storagepool-filesystem-configure-xattr-` + filesystem.id + `" class="ct-validation-wrapper">
                             <div id="div-storagepool-filesystem-configure-xattr-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="15" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="10" type="button">
                                     <span id="btnspan-storagepool-filesystem-configure-xattr-` + filesystem.id + `" class="pull-left" data-field-value="" data-field-value-new="">On</span>
                                     <div class="caret"></div>
                                 </button>
@@ -15143,24 +16356,45 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         </div>
                         <label class="control-label">Mountpoint</label>
                         <div id="validationwrapper-storagepool-filesystem-configure-mountpoint-` + filesystem.id + `" class="ct-validation-wrapper">
-                            <input id="input-storagepool-filesystem-configure-mountpoint-` + filesystem.id + `" class="form-control privileged-modal" data-field="mountpoint" data-field-type="text-input" data-field-value="" tabindex="8" type="text" value="">
+                            <input id="input-storagepool-filesystem-configure-mountpoint-` + filesystem.id + `" class="form-control privileged-modal" data-field="mountpoint" data-field-type="text-input" data-field-value="" tabindex="11" type="text" value="">
                             <span id="helpblock-storagepool-filesystem-configure-mountpoint-` + filesystem.id + `" class="help-block"></span>
                             ` + (pool.altroot ? `<span id="helpblock-storagepool-filesystem-configure-mountpoint-altroot-` + filesystem.id + `" class="help-block">Alternative Root is enabled for storage pool.</span>` : ``) + `
                         </div>
                         <label class="control-label">NFS Share</label>
                         <div role="group">
-                            <label id="switch-storagepool-filesystem-configure-sharenfs-` + filesystem.id + `" class="onoff-ct privileged-modal"><input tabIndex="9" type="checkbox"><span class="switch-toggle"></span></label><span></span>
+                            <label id="switch-storagepool-filesystem-configure-sharenfs-` + filesystem.id + `" class="onoff-ct privileged-modal"><input tabIndex="12" type="checkbox"><span class="switch-toggle"></span></label><span></span>
                         </div>
                         <label id="controllabel-storagepool-filesystem-configure-sharenfs-options-` + filesystem.id + `" class="control-label hidden">NFS Options</label>
                         <div id="validationwrapper-storagepool-filesystem-configure-sharenfs-options-` + filesystem.id + `" class="ct-validation-wrapper hidden">
-                            <div id="alert-storagepool-filesystem-configure-sharenfs-options-` + filesystem.id + `" class="alert alert-warning hidden"><span class="pficon pficon-warning-triangle-o"></span><span>NFS is not installed.</span></div>
-                            <input id="input-storagepool-filesystem-configure-sharenfs-options-` + filesystem.id + `" class="form-control privileged-modal" data-field="sharenfs" data-field-type="text-input" data-field-value="" tabindex="10" type="text" value="sec=sys,rw,crossmnt,no_subtree_check,no_root_squash">
+                            ` + FnDisplayInlineAlert({ status: "warning", title: "NFS is not installed.", description: null }, { name: "storagepool-filesystem-configure-sharenfs-options", id: filesystem.id, hidden: true }) + `
+                            <input id="input-storagepool-filesystem-configure-sharenfs-options-` + filesystem.id + `" class="form-control privileged-modal" data-field="sharenfs" data-field-type="text-input" data-field-value="" tabindex="13" type="text" value="sec=sys,rw,crossmnt,no_subtree_check,no_root_squash">
                             <span id="helpblock-storagepool-filesystem-configure-sharenfs-options-` + filesystem.id + `" class="help-block"></span>
+                        </div>
+                        <label class="control-label">Quota</label>
+                        <div id="validationwrapper-storagepool-filesystem-configure-quota-` + filesystem.id + `" class="ct-validation-wrapper">
+                            <div class="slider-pf">
+                                <input id="slider-storagepool-filesystem-configure-quota-` + filesystem.id + `" data-provide="slider" data-slider-max="1000" data-slider-min="0" data-slider-tooltip="hide" data-slider-value="0" disabled="true" tabIndex="-1" type="text">
+                                <input id="input-storagepool-filesystem-configure-quota-` + filesystem.id + `" class="slider-input-pf size-ct-text form-control privileged-modal" data-field-value="" maxlength="6" tabIndex="15" type="text">
+                                <div id="div-storagepool-filesystem-configure-quota-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
+                                    <button aria-expanded="false" class="btn btn-default dropdown-toggle size-ct-unit" data-toggle="dropdown" tabIndex="16" type="button">
+                                        <span id="btnspan-storagepool-filesystem-configure-quota-` + filesystem.id + `" class="pull-left" data-field-value="">KiB</span>
+                                        <div class="caret"></div>
+                                    </button>
+                                    <ul id="dropdown-storagepool-filesystem-configure-quota-` + filesystem.id + `" class="dropdown-menu">
+                                        <li class="active" value="KiB"><a tabindex="-1">KiB</a></li>
+                                        <li class="hidden" value="MiB"><a tabindex="-1">MiB</a></li>
+                                        <li class="hidden" value="GiB"><a tabindex="-1">GiB</a></li>
+                                        <li class="hidden" value="TiB"><a tabindex="-1">TiB</a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <span id="helpblock-storagepool-filesystem-configure-used-` + filesystem.id + `" class="help-block"></span>
+                            <span id="helpblock-storagepool-filesystem-configure-quota-` + filesystem.id + `" class="help-block"></span>
                         </div>
                         <label class="control-label">Record Size</label>
                         <div class="ct-validation-wrapper">
                             <div id="div-storagepool-filesystem-configure-recordsize-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="11" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="17" type="button">
                                     <span id="btnspan-storagepool-filesystem-configure-recordsize-` + filesystem.id + `" class="pull-left" data-field-value="" data-field-value-new="">128 KiB</span>
                                     <div class="caret"></div>
                                 </button>
@@ -15186,9 +16420,9 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         <div id="validationwrapper-storagepool-filesystem-configure-refreservation-` + filesystem.id + `" class="ct-validation-wrapper">
                             <div class="slider-pf">
                                 <input id="slider-storagepool-filesystem-configure-refreservation-` + filesystem.id + `" data-provide="slider" data-slider-max="1000" data-slider-min="0" data-slider-tooltip="hide" data-slider-value="0" disabled="true" tabIndex="-1" type="text">
-                                <input id="input-storagepool-filesystem-configure-refreservation-` + filesystem.id + `" class="slider-input-pf size-ct-text form-control privileged-modal" data-field-value="" maxlength="6" tabIndex="13" type="text">
+                                <input id="input-storagepool-filesystem-configure-refreservation-` + filesystem.id + `" class="slider-input-pf size-ct-text form-control privileged-modal" data-field-value="" maxlength="6" tabIndex="19" type="text">
                                 <div id="div-storagepool-filesystem-configure-refreservation-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                    <button aria-expanded="false" class="btn btn-default dropdown-toggle size-ct-unit" data-toggle="dropdown" tabIndex="14" type="button">
+                                    <button aria-expanded="false" class="btn btn-default dropdown-toggle size-ct-unit" data-toggle="dropdown" tabIndex="20" type="button">
                                         <span id="btnspan-storagepool-filesystem-configure-refreservation-` + filesystem.id + `" class="pull-left" data-field-value="">KiB</span>
                                         <div class="caret"></div>
                                     </button>
@@ -15206,7 +16440,7 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         <label class="control-label ` + ((!pool.feature.allocation_classes || $("#tr-storagepool-" + pool.id).attr("data-pool-special") === "false") ? `hidden` : ``) + `">Special Small Blocks</label>
                         <div class="ct-validation-wrapper ` + ((!pool.feature.allocation_classes || $("#tr-storagepool-" + pool.id).attr("data-pool-special") === "false") ? `hidden` : ``) + `">
                             <div id="div-storagepool-filesystem-configure-special_small_blocks-dropdown-` + filesystem.id + `" class="btn-group bootstrap-select dropdown form-control privileged-modal">
-                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="11" type="button">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="21" type="button">
                                     <span id="btnspan-storagepool-filesystem-configure-special_small_blocks-` + filesystem.id + `" class="pull-left" data-field-value="" data-field-value-new="">0 B</span>
                                     <div class="caret"></div>
                                 </button>
@@ -15228,13 +16462,13 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         </div>
                         <label class="control-label">Options</label>
                         <div role="group">
-                            <label id="switch-storagepool-filesystem-configure-selinux-` + filesystem.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="17" type="checkbox"><span class="switch-toggle"></span></label><span>SELinux contexts for Samba</span>
+                            <label id="switch-storagepool-filesystem-configure-selinux-` + filesystem.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="22" type="checkbox"><span class="switch-toggle"></span></label><span>SELinux contexts for Samba</span>
                         </div>
                         <div class="` + (zfsmanager.configuration.samba.manage ? `hidden` : ``) + `" role="group">
-                            <label id="switch-storagepool-filesystem-configure-sharesmb-` + filesystem.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="18" type="checkbox"><span class="switch-toggle"></span></label><span>Enable Samba share <a class="dialog-item-ct-tooltip" data-placement="auto right" data-toggle="tooltip" tabindex="-1" title="ZFS creates and manages the share in the Samba Usershares directory."><span class="fa fa-lg fa-info-circle"></span></a></span>
+                            <label id="switch-storagepool-filesystem-configure-sharesmb-` + filesystem.id + `" class="onoff-ct privileged-modal" data-field-value=""><input tabIndex="23" type="checkbox"><span class="switch-toggle"></span></label><span>Enable Samba share <a class="dialog-item-ct-tooltip" data-placement="auto right" data-toggle="tooltip" tabindex="-1" title="ZFS creates and manages the share in the Samba Usershares directory."><span class="fa fa-lg fa-info-circle"></span></a></span>
                         </div>
                         <div class="hidden" role="group">
-                            <label id="switch-storagepool-filesystem-configure-samba-restart-` + filesystem.id + `" class="onoff-ct privileged-modal"><input tabIndex="19" type="checkbox"><span class="switch-toggle"></span></label><span>Restart Samba service</span>
+                            <label id="switch-storagepool-filesystem-configure-samba-restart-` + filesystem.id + `" class="onoff-ct privileged-modal"><input tabIndex="24" type="checkbox"><span class="switch-toggle"></span></label><span>Restart Samba service</span>
                         </div>
                     </form>
 				</div>
@@ -15252,6 +16486,60 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
 		</div>
 
 	    \x3Cscript nonce="1t55lZ7tzuKTreHVNwE66Ox32Mc=">
+            $("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").tooltip({ trigger: "manual" })
+                .on("keyup", function (element) {
+                    let $this = $(this);
+                    let sd = $this.siblings("[data-provide=slider]").slider();
+
+                    if ($this.val().trim() && !$.isNumeric(this.value)) {
+                        this.value = sd.slider("getValue");
+                    }
+                })
+                .on("keypress blur", function (element) {
+                    if (element.which == 13 || element.type === "blur") {
+                        element.preventDefault();
+
+                        let $this = $(this);
+                        let sd = $this.siblings("[data-provide=slider]").slider();
+                        let max = sd.slider("getAttribute", "max");
+                        let min = sd.slider("getAttribute", "min");
+
+                        if (!$.isNumeric(this.value) || (this.value > max || this.value < min)) {
+                            let warningInfo = $.isNumeric(this.value) ? "Valid value should be between " + min + " and " + max : "Valid value should be number";
+                            $this.attr("data-original-title", warningInfo).tooltip("show").addClass("warning");
+                            this.value = sd.slider("getValue");
+                            setTimeout(function () {
+                                $this.tooltip("hide");
+                            }, 3000);
+                        } else {
+                            if ($this.is(".warning")) {
+                                $this.tooltip("hide");
+                            }
+
+                            this.value = $this.val().trim();
+                            sd.slider("setValue", this.value);
+                        }
+                    }
+                })
+                .siblings("[data-provide=slider]").each(function () {
+                    $("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").val(this.value);
+                    $(this).slider().on("change", function (element) {
+                        $("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").val(element.value.newValue);
+                    });
+                });
+
+            $("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").on("change textInput input", function (element) {
+                if ($(this).val() > 1000) { //Force reset to maximum allowed value
+                    $(this).val(1000);
+                } else if ($(this).val() < 0) { //Force reset to minimum allowed value
+                    $(this).val(0);
+                }
+
+                if ($.isNumeric($(this).val())) {
+                    $("#slider-storagepool-filesystem-configure-quota-` + filesystem.id + `").slider("setValue", $(this).val());
+                }
+            });
+
             $("#input-storagepool-filesystem-configure-refreservation-` + filesystem.id + `").tooltip({ trigger: "manual" })
                 .on("keyup", function (element) {
                     let $this = $(this);
@@ -15348,6 +16636,7 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                     defcontext: "",
                     fscontext: "",
                     mountpoint: "",
+                    quota: "none",
                     readonly: "",
                     recordsize: "",
                     refreservation: "0B",
@@ -15465,6 +16754,12 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                     filesystem.special_small_blocks = ($("#btnspan-storagepool-filesystem-configure-special_small_blocks-` + filesystem.id + `").attr("data-field-value-new") != "" ? $("#btnspan-storagepool-filesystem-configure-special_small_blocks-` + filesystem.id + `").attr("data-field-value-new") : null);
                     filesystem.xattr = ($("#btnspan-storagepool-filesystem-configure-xattr-` + filesystem.id + `").attr("data-field-value-new") != "" ? $("#btnspan-storagepool-filesystem-configure-xattr-` + filesystem.id + `").attr("data-field-value-new") : null);
 
+                    if ($("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").val() > 0) { //Remove friendly text so final value is sent
+                        filesystem.quota = $("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").val() + $("#btnspan-storagepool-filesystem-configure-quota-` + filesystem.id + `").attr("data-field-value").replace(/iB$/g, "");
+                    } else {
+                        filesystem.quota = "none";
+                    }
+
                     if ($("#input-storagepool-filesystem-configure-refreservation-` + filesystem.id + `").val() > 0) { //Remove friendly text so final value is sent
                         filesystem.refreservation = $("#input-storagepool-filesystem-configure-refreservation-` + filesystem.id + `").val() + $("#btnspan-storagepool-filesystem-configure-refreservation-` + filesystem.id + `").attr("data-field-value").replace(/iB$/g, "");
                     } else {
@@ -15551,6 +16846,10 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         samba.restart = $("#switch-storagepool-filesystem-configure-samba-restart-` + filesystem.id + ` input").prop("checked");
                     }
 
+                    if (filesystem.quota == $("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").attr("data-field-value")) {
+                        filesystem.quota = null;
+                    }
+
                     if (filesystem.readonly == $("#switch-storagepool-filesystem-configure-readonly-` + filesystem.id + `").attr("data-field-value")) {
                         filesystem.readonly = null;
                     }
@@ -15595,7 +16894,7 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                         filesystem.xattr = null;
                     }
 
-                    FnFileSystemConfigure({ name: "` + pool.name + `", id: "` + pool.id + `", altroot: ` + pool.altroot + `, readonly: ` + pool.readonly + ` }, { name: "` + filesystem.name + `", id: "` + filesystem.id + `", aclinherit: filesystem.aclinherit, acltype: filesystem.acltype, atime: filesystem.atime, canmount: filesystem.canmount, checksum: filesystem.checksum, compression: filesystem.compression, context: filesystem.context, dedup: filesystem.dedup, dnodesize: filesystem.dnodesize, defcontext: filesystem.defcontext, fscontext: filesystem.fscontext, mountpoint: filesystem.mountpoint, readonly: filesystem.readonly, recordsize: filesystem.recordsize, refreservation: filesystem.refreservation, rootcontext: filesystem.rootcontext, sharenfs: filesystem.sharenfs, sharesmb: filesystem.sharesmb, special_small_blocks: filesystem.special_small_blocks, type: "` + filesystem.type + `", xattr: filesystem.xattr }, { restart: samba.restart }, { id: modal.id });
+                    FnFileSystemConfigure({ name: "` + pool.name + `", id: "` + pool.id + `", altroot: ` + pool.altroot + `, readonly: ` + pool.readonly + ` }, { name: "` + filesystem.name + `", id: "` + filesystem.id + `", aclinherit: filesystem.aclinherit, acltype: filesystem.acltype, atime: filesystem.atime, canmount: filesystem.canmount, checksum: filesystem.checksum, compression: filesystem.compression, context: filesystem.context, dedup: filesystem.dedup, dnodesize: filesystem.dnodesize, defcontext: filesystem.defcontext, fscontext: filesystem.fscontext, mountpoint: filesystem.mountpoint, quota: filesystem.quota, readonly: filesystem.readonly, recordsize: filesystem.recordsize, refreservation: filesystem.refreservation, rootcontext: filesystem.rootcontext, sharenfs: filesystem.sharenfs, sharesmb: filesystem.sharesmb, special_small_blocks: filesystem.special_small_blocks, type: "` + filesystem.type + `", xattr: filesystem.xattr }, { restart: samba.restart }, { id: modal.id });
                 }
             });
 
@@ -15645,6 +16944,25 @@ function FnModalFileSystemConfigureContent(pool = { name, id, altroot: false, fe
                 $("#btnspan-storagepool-filesystem-configure-dnodesize-` + filesystem.id + `").text($(this).text()).attr("data-field-value-new", (/^Default/.test($(this).text()) ? "Default" : $(this).parent().attr("value")));
                 $(this).parent().siblings().removeClass("active");
                 $(this).parent().addClass("active");
+			});
+
+			$("#dropdown-storagepool-filesystem-configure-quota-` + filesystem.id + `").on("click", "li a", function () {
+                $("#btnspan-storagepool-filesystem-configure-quota-` + filesystem.id + `").text($(this).text()).attr("data-field-value", $(this).text());
+                $(this).parent().siblings().removeClass("active");
+                $(this).parent().addClass("active");
+
+                let size = {
+                    slider: {
+                        value: $("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").val(),
+                        valuemax: $("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").attr("data-filesystem-quota-max-" + $(this).text().toLowerCase())
+                    }
+                };
+
+                $("#slider-storagepool-filesystem-configure-quota-` + filesystem.id + `").data("slider").options.max = size.slider.valuemax;
+                $("#slider-storagepool-filesystem-configure-quota-` + filesystem.id + `").data("slider").options.step = (size.slider.valuemax < 10 ? "0.1" : "1");
+                $("#slider-storagepool-filesystem-configure-quota-` + filesystem.id + `").slider("setValue", 0); //Force display update
+                $("#slider-storagepool-filesystem-configure-quota-` + filesystem.id + `").slider("setValue", size.slider.value);
+                $("#input-storagepool-filesystem-configure-quota-` + filesystem.id + `").val($("#slider-storagepool-filesystem-configure-quota-` + filesystem.id + `").data("slider").getValue());
 			});
 
 			$("#dropdown-storagepool-filesystem-configure-recordsize-` + filesystem.id + `").on("click", "li a", function () {
@@ -15960,7 +17278,7 @@ function FnModalFileSystemMountContent(pool = { name, id, altroot: false, readon
                 <div class="modal-body">
                     <div class="modal-ct-bodytext-1">Are you sure you want to mount ` + filesystem.type.toLowerCase() + `: <strong class="modal-ct-name">` + filesystem.name + `</strong>?</div>
                     <div id="div-storagepool-filesystem-mount-warning-` + filesystem.id + `"></div>
-                    <div id="alert-storagepool-filesystem-samba-warning-` + filesystem.id + `" class="alert alert-info hidden"><span class="pficon pficon-info"></span><span>Enabling Samba share on the root file system will expose all child file systems regardless of their share status.</span></div>
+                    ` + FnDisplayInlineAlert({ status: "warning", title: "Enabling Samba share on the root file system will expose all child file systems regardless of their share status.", description: null }, { name: "storagepool-filesystem-samba-warning", id: filesystem.id, hidden: true }) + `
                     <form class="ct-form ct-form-spacing">
                         <label class="control-label">Options</label>
                         <div role="group">
@@ -16040,8 +17358,8 @@ function FnModalFileSystemPromoteContent(pool = { name, id }, filesystem = { nam
                 <div class="modal-body">
                     <div class="modal-ct-bodytext-1">Are you sure you want to promote ` + filesystem.type.toLowerCase() + `: <strong class="modal-ct-name">` + filesystem.name + `</strong>?</div>
                     <div class="modal-ct-bodytext-1">Origin: ` + filesystem.origin + `</div>
-                    <div class="alert alert-info"><span class="pficon pficon-info"></span><span>Origin file system: ` + filesystem.origin.replace(/^(.*)\@.*$/, "$1") + ` will be promoted to a clone file system.</span></div>
-                    ` + (new RegExp("^" + filesystem.origin.replace(/^(.*)\@.*$/, "$1") + "/").test(filesystem.name) ? `<div class="alert alert-warning"><span class="pficon pficon-warning-triangle-o"></span><span>Clone file system is a child of origin file system, which may create recursive dependency errors. It is recommended to rename this clone file system to a name that is not a child file system of the origin file system before promoting.</span></div>` : ``) + `
+                    ` + FnDisplayInlineAlert({ status: "info", title: "Origin file system: " + filesystem.origin.replace(/^(.*)\@.*$/, "$1") + " will be promoted to a clone file system.", description: null }, { name: null, id: null, hidden: false }) + `
+                    ` + (new RegExp("^" + filesystem.origin.replace(/^(.*)\@.*$/, "$1") + "/").test(filesystem.name) ? FnDisplayInlineAlert({ status: "warning", title: "Clone file system is a child of origin file system, which may create recursive dependency errors. It is recommended to rename this clone file system to a name that is not a child file system of the origin file system before promoting.", description: null }, { name: null, id: null, hidden: false }) : ``) + `
                 </div>
                 <div class="modal-footer">
                     <div></div>
@@ -16278,8 +17596,8 @@ function FnModalFileSystemSambaConfigureContent(pool = { name, id, altroot: fals
                     <h4 class="modal-title">Configure Samba Share</h4>
                 </div>
                 <div class="modal-body">
-                    ` + (filesystem.name == pool.name ? `<div class="alert alert-info"><span class="pficon pficon-info"></span><span>Samba share on the root file system exposes all child file systems regardless of their share status.</span></div>` : ``) + `
-                    <div id="alert-storagepool-filesystem-samba-configure-configurationmissing-` + filesystem.id + `" class="alert alert-info hidden"><span class="pficon pficon-info"></span><span>Share configuration does not exist. Configure to save share configuration.</span></div>
+                    ` + (filesystem.name == pool.name ? FnDisplayInlineAlert({ status: "warning", title: "Samba share on the root file system exposes all child file systems regardless of their share status.", description: null }, { name: null, id: null, hidden: false }) : ``) + `
+                    ` + FnDisplayInlineAlert({ status: "warning", title: "Share configuration does not exist. Configure to save a new share configuration.", description: null }, { name: "storagepool-filesystem-samba-configure-configurationmissing", id: filesystem.id, hidden: true }) + `
                     <form class="ct-form">
                         <label class="control-label">Share Name <a data-placement="right" data-toggle="tooltip" tabindex="-1" title="Alphanumerical characters are allowed with the addition of standard keyboard special characters @%+!#$^,(){}~-_.<br><br>Name can not be global, homes or printers."><span class="fa fa-lg fa-info-circle"></span></a></label>
                         <div id="validationwrapper-storagepool-filesystem-samba-configure-name-` + filesystem.id + `" class="ct-validation-wrapper">
@@ -16570,7 +17888,7 @@ function FnModalFileSystemSambaEnableContent(pool = { name, id, altroot: false, 
                     <h4 class="modal-title">Enable Samba Share</h4>
                 </div>
                 <div class="modal-body">
-                    ` + (filesystem.name == pool.name ? `<div class="alert alert-info"><span class="pficon pficon-info"></span><span>Enabling Samba share on the root file system will expose all child file systems regardless of their share status.</span></div>` : ``) + `
+                    ` + (filesystem.name == pool.name ? FnDisplayInlineAlert({ status: "warning", title: "Enabling Samba share on the root file system will expose all child file systems regardless of their share status.", description: null }, { name: null, id: null, hidden: false }) : ``) + `
                     <form class="ct-form">
                         <label class="control-label">Share Name <a data-placement="right" data-toggle="tooltip" tabindex="-1" title="Alphanumerical characters are allowed with the addition of standard keyboard special characters @%+!#$^,(){}~-_.<br><br>Name can not be global, homes or printers."><span class="fa fa-lg fa-info-circle"></span></a></label>
                         <div id="validationwrapper-storagepool-filesystem-samba-enable-name-` + filesystem.id + `" class="ct-validation-wrapper">
@@ -16788,16 +18106,16 @@ function FnModalFileSystemSnapshotCreateContent(pool = { name, id }, filesystem 
                         <div class="modal-ct-name">` + filesystem.name + `</div>
                         <label class="control-label">Custom Name</label>
                         <div role="group">
-                            <label id="switch-storagepool-filesystem-snapshot-create-customname-` + filesystem.id + `" class="onoff-ct privileged-modal"><input tabIndex="2" type="checkbox"><span class="switch-toggle"></span></label><span></span>
+                            <label id="switch-storagepool-filesystem-snapshot-create-customname-` + filesystem.id + `" class="onoff-ct privileged-modal"><input tabIndex="1" type="checkbox"><span class="switch-toggle"></span></label><span></span>
                         </div>
                         <label class="control-label">Name <a data-placement="right" data-toggle="tooltip" tabindex="-1" title="Alphanumerical characters are allowed with the addition of colon (:), hypen (-), underscore (_), period (.) and whitespace ( ) special characters.<br><br>Name can not begin with special characters."><span class="fa fa-lg fa-info-circle"></span></a></label>
                         <div id="validationwrapper-storagepool-filesystem-snapshot-create-name-` + filesystem.id + `" class="ct-validation-wrapper">
-                            <input id="input-storagepool-filesystem-snapshot-create-name-` + filesystem.id + `" class="form-control privileged-modal" data-field="name" data-field-type="text-input" readonly="true" tabindex="3" type="text" value="YYYY.MM.DD-HH.MM.SS">
+                            <input id="input-storagepool-filesystem-snapshot-create-name-` + filesystem.id + `" class="form-control privileged-modal" data-field="name" data-field-type="text-input" readonly="true" tabindex="2" type="text" value="YYYY.MM.DD-HH.MM.SS">
                             <span id="helpblock-storagepool-filesystem-snapshot-create-name-` + filesystem.id + `" class="help-block"></span>
                         </div>
                         <label class="control-label">Options</label>
                         <div role="group">
-                            <label id="switch-storagepool-filesystem-snapshot-create-recursive-` + filesystem.id + `" class="onoff-ct privileged-modal"><input tabIndex="4" type="checkbox"><span class="switch-toggle"></span></label><span>Create snapshots of child file systems</span>
+                            <label id="switch-storagepool-filesystem-snapshot-create-recursive-` + filesystem.id + `" class="onoff-ct privileged-modal"><input tabIndex="3" type="checkbox"><span class="switch-toggle"></span></label><span>Create snapshots of child file systems</span>
                         </div>
                     </form>
                 </div>
@@ -17603,7 +18921,7 @@ function FnModalSnapshotDestroyContent(pool = { name, id, altroot: false, readon
                     restart: $("#switch-storagepool-snapshot-destroy-samba-restart-` + snapshot.id + ` input").prop("checked")
                 };
 
-                FnSnapshotDestroy({ name: "` + pool.name + `", id: "` + pool.id + `", altroot: `+ pool.altroot + `, readonly: ` + pool.readonly + ` }, { name: "` + snapshot.name + `", id: "` + snapshot.id + `", clones: ` + (snapshot.clones.length > 0 ? `["` + snapshot.clones.join(`", "`) + `"]` : `[]`) + `, recursive: snapshot.recursive, recursiveall: snapshot.recursiveall }, { restart: samba.restart });
+                FnSnapshotDestroy({ name: "` + pool.name + `", id: "` + pool.id + `", altroot: ` + pool.altroot + `, readonly: ` + pool.readonly + ` }, { name: "` + snapshot.name + `", id: "` + snapshot.id + `", clones: ` + (snapshot.clones.length > 0 ? `["` + snapshot.clones.join(`", "`) + `"]` : `[]`) + `, recursive: snapshot.recursive, recursiveall: snapshot.recursiveall }, { restart: samba.restart });
 			});
         \x3C/script>
     `;
@@ -17787,7 +19105,7 @@ function FnModalSnapshotRollBackContent(pool = { name, id, altroot: false, reado
                 </div>
                 <div class="modal-body">
                     <div class="modal-ct-bodytext-1">Are you sure you want to roll back snapshot: <strong class="modal-ct-name">` + snapshot.name + `</strong>?</div>
-                    <div class="alert alert-warning"><span class="pficon pficon-warning-triangle-o"></span><span>All data that has changed since the snapshot will be discarded.</span></div>
+                    ` + FnDisplayInlineAlert({ status: "danger", title: "All data that has changed since the snapshot will be discarded.", description: null }, { name: null, id: null, hidden: false }) + `
                     <div id="panelgroup-storagepool-snapshot-rollback-` + snapshot.id + `" class="panel-group" data-snapshot-child-filesystems="0" data-snapshot-child-snapshotswithclones="0" data-snapshot-snapshots="0">
                         <div id="panel-storagepool-snapshot-rollback-snapshots-` + snapshot.id + `" class="panel panel-default hidden">
                             <div class="panel-heading">
@@ -17835,10 +19153,10 @@ function FnModalSnapshotRollBackContent(pool = { name, id, altroot: false, reado
                             <label id="switch-storagepool-snapshot-rollback-recursiveall-` + snapshot.id + `" class="onoff-ct privileged-modal"><input tabIndex="2" type="checkbox"><span class="switch-toggle"></span></label><span>Destroy all newer: snapshots, cloned file systems and file systems</span>
                         </div>
                         <div class="hidden" role="group">
-                            <label id="switch-storagepool-snapshot-rollback-force-` + snapshot.id + `" class="onoff-ct privileged-modal"><input tabIndex="2" type="checkbox"><span class="switch-toggle"></span></label><span>Forcefully unmount cloned file systems</span>
+                            <label id="switch-storagepool-snapshot-rollback-force-` + snapshot.id + `" class="onoff-ct privileged-modal"><input tabIndex="3" type="checkbox"><span class="switch-toggle"></span></label><span>Forcefully unmount cloned file systems</span>
                         </div>
                         <div role="group">
-                            <label id="switch-storagepool-snapshot-rollback-samba-restart-` + snapshot.id + `" class="onoff-ct privileged-modal"><input tabIndex="3" type="checkbox"><span class="switch-toggle"></span></label><span>Restart Samba service</span>
+                            <label id="switch-storagepool-snapshot-rollback-samba-restart-` + snapshot.id + `" class="onoff-ct privileged-modal"><input tabIndex="4" type="checkbox"><span class="switch-toggle"></span></label><span>Restart Samba service</span>
                         </div>
                     </form>
                 </div>
@@ -17946,7 +19264,7 @@ function FnModalStatusDiskAttach(pool = { name, id, status: { config: { items: {
             $("#btn-storagepool-status-disk-attach-` + pool.status.config.items.index + `-` + pool.id + `").on("click", function () {
                 FnStoragePoolRefreshAutoDisable({ name: "` + pool.name + `", id: "` + pool.id + `" });
                 FnModalStatusDiskAttachContent({ name: "` + pool.name + `", id: "` + pool.id + `", status: { config: { items: { index: ` + pool.status.config.items.index + ` } } } }, { id: "` + virtualdevice.id + `" , disk: ` + virtualdevice.disk + ` }, { id: $("#modal-storagepool-status-disk-attach-` + pool.status.config.items.index + `-` + pool.id + `"), tiername: "` + modal.tiername + `" });
-                FnDisksAvailableGet({ wwn: true }, { name: "storagepool-status-disk-attach-disks", id: "` + pool.status.config.items.index + `-` + pool.id + `", default: true });
+                FnDisksAvailableGet({ name: "storagepool-status-disk-attach-disks", id: "` + pool.status.config.items.index + `-` + pool.id + `", default: true });
             });
         \x3C/script>
     `;
@@ -17962,7 +19280,7 @@ function FnModalStatusDiskAttachContent(pool = { name, id, status: { config: { i
                     <h4 class="modal-title">Attach Disk</h4>
                 </div>
                 <div class="modal-body">
-                    ` + (virtualdevice.disk ? `<div class="alert alert-info"><span class="pficon pficon-info"></span><span>Attaching a disk will convert the virtual device from Disk to Mirror.</span></div>` : ``) + `
+                    ` + (virtualdevice.disk ? FnDisplayInlineAlert({ status: "info", title: "Attaching a disk will convert the virtual device from Disk to Mirror.", description: null }, { name: null, id: null, hidden: false }) : ``) + `
                     <form class="ct-form">
                         <label class="control-label">Virtual Device</label>
                         <div class="ct-validation-wrapper">
@@ -17970,12 +19288,28 @@ function FnModalStatusDiskAttachContent(pool = { name, id, status: { config: { i
                         </div>
                         <label class="control-label">Disks WWN</label>
                         <div role="group">
-                            <label id="switch-storagepool-status-disk-attach-diskswwn-` + pool.status.config.items.index + `-` + pool.id + `" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="1" type="checkbox"><span class="switch-toggle"></span></label><span></span>
+                            <label id="switch-storagepool-status-disk-attach-disks-wwn-` + pool.status.config.items.index + `-` + pool.id + `" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="1" type="checkbox"><span class="switch-toggle"></span></label><span></span>
+                        </div>
+                        <label id="controllabel-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="control-label hidden">Disks Identifier</label>
+                        <div id="validationwrapper-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="ct-validation-wrapper hidden">
+                            <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="2" type="button">
+                                    <span id="btnspan-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="pull-left" data-field-value="blockdevice">Block Device</span>
+                                    <div class="caret"></div>
+                                </button>
+                                <ul id="dropdown-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="dropdown-menu">
+                                    <li class="active" value="blockdevice"><a tabindex="-1">Block Device</a></li>
+                                    <li value="disk"><a tabindex="-1">Disk</a></li>
+                                    <li value="path"><a tabindex="-1">Hardware Path</a></li>
+                                    <li value="vdev"><a tabindex="-1">Virtual Device Mapping</a></li>
+                                </ul>
+                            </div>
                         </div>
                         <label class="control-label">Disks <a data-placement="right" data-toggle="tooltip" tabindex="-1" title="Drives with 4 KiB physical sector size may report/emulate 512 B for backwards compatibility.<br><br>Configure the storage pool sector size to 4 KiB or above to optimise disk operation"><span class="fa fa-lg fa-info-circle"></span></a></label>
                         <div id="validationwrapper-storagepool-status-disk-attach-disks-` + pool.status.config.items.index + `-` + pool.id + `" class="ct-validation-wrapper" tabindex="-1">
                             <ul id="listgroup-storagepool-status-disk-attach-disks-` + pool.status.config.items.index + `-` + pool.id + `" class="list-group dialog-list-ct" data-field="disks" data-field-type="select-disks"></ul>
-                            <span id="helpblock-storagepool-status-disk-attach-disks-wwnwarning-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
+                            <span id="helpblock-storagepool-status-disk-attach-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
+                            ` + (zfsmanager.zfs.warnings.nvmevdev ? `<span id="helpblock-storagepool-status-disk-attach-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block hidden">Virtual Device Mapping identifiers for NVMe devices may not have been created due to a bug in the <a href="https://github.com/zfsonlinux/zfs/issues/9730" target="_blank">ZFS software</a>. Update ZFS to 0.8.3 for fix.</span>` : ``) + `
                             <span id="helpblock-storagepool-status-disk-attach-disks-zfsmemberwarning-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
                             <span id="helpblock-storagepool-status-disk-attach-disks-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
                         </div>
@@ -17999,11 +19333,36 @@ function FnModalStatusDiskAttachContent(pool = { name, id, status: { config: { i
         </div>
 
         \x3Cscript nonce="1t55lZ7tzuKTreHVNwE66Ox32Mc=">
-            $("#switch-storagepool-status-disk-attach-diskswwn-` + pool.status.config.items.index + `-` + pool.id + ` input").on("click", function () {
-                $("#helpblock-storagepool-status-disk-attach-disks-wwnwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
-                $("#helpblock-storagepool-status-disk-attach-disks-zfsmemberwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
+            $("#switch-storagepool-status-disk-attach-disks-wwn-` + pool.status.config.items.index + `-` + pool.id + ` input").on("click", function () {
+                $("#btnspan-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").text("Block Device");
+                $("#dropdown-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + ` li").siblings().removeClass("active");
+                $("#dropdown-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + ` li[value='blockdevice']").addClass("active");
+                $("#helpblock-storagepool-status-disk-attach-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
+                ` + (zfsmanager.zfs.warnings.nvmevdev ? `$("#helpblock-storagepool-status-disk-attach-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");` : ``) + `
 
-                FnDisksAvailableGet({ wwn: ($(this).prop("checked") ? true : false) }, { name: "storagepool-status-disk-attach-disks", id: "` + pool.status.config.items.index + `-` + pool.id + `", default: false });
+                let disk = {
+                    identifier: ($(this).prop("checked") ? "wwn" : "blockdevice"),
+                    identifiertext: ($(this).prop("checked") ? "WWN" : "Block Device")
+                };
+
+                if ($(this).prop("checked")) {
+                    $("#controllabel-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");
+                    $("#validationwrapper-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");
+                } else {
+                    $("#controllabel-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
+                    $("#validationwrapper-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
+                }
+
+                $("#listgroup-storagepool-status-disk-attach-disks-` + pool.status.config.items.index + `-` + pool.id + ` input[name='checkbox-storagepool-status-disk-attach-disks-` + pool.status.config.items.index + `-` + pool.id + `']").map(function () {
+                    if ($(this).attr("data-disk-id-" + disk.identifier)) {
+                        $(this).next().find(".select-ct-disk-row-id").text((disk.identifier == "blockdevice" ? "/dev/" : "") + $(this).attr("data-disk-id-" + disk.identifier));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-" + disk.identifier));
+                    } else {
+                        $(this).next().find(".select-ct-disk-row-id").text("/dev/" + $(this).attr("data-disk-id-blockdevice"));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-blockdevice"));
+                        $("#helpblock-storagepool-status-disk-attach-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden").text("One or more disks is missing a " + disk.identifiertext + " identifier.");
+                    }
+                });
             });
 
             $("#btn-storagepool-status-disk-attach-apply-` + pool.status.config.items.index + `-` + pool.id + `").on("click", function () {
@@ -18011,8 +19370,7 @@ function FnModalStatusDiskAttachContent(pool = { name, id, status: { config: { i
                 $(this).prop("disabled", true);
 
                 let disk = {
-                    idnew: [],
-                    wwn: true
+                    idnew: []
                 };
                 let modal = {
                     name: "",
@@ -18048,8 +19406,6 @@ function FnModalStatusDiskAttachContent(pool = { name, id, status: { config: { i
                 }
 
                 if (validation.disks) {
-                    disk.wwn = $("#switch-storagepool-status-disk-attach-diskswwn-` + pool.status.config.items.index + `-` + pool.id + ` input").prop("checked");
-
                     modal.name = "storagepool-status-disk-attach";
                     modal.id = "` + pool.status.config.items.index + `-` + pool.id + `";
 
@@ -18058,9 +19414,40 @@ function FnModalStatusDiskAttachContent(pool = { name, id, status: { config: { i
                     $("[id^=btn-storagepool-status-dropdown-][id$=` + pool.id + `]").addClass("disabled");
                     $("#spinner-storagepool-status-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
 
-                    FnStoragePoolDiskAttach({ name: "` + pool.name + `", id: "` + pool.id + `", force: pool.force }, { id: "` + virtualdevice.id + `", disk: ` + virtualdevice.disk + ` }, { idnew: disk.idnew, wwn: disk.wwn }, { name: modal.name, id: modal.id });
+                    FnStoragePoolDiskAttach({ name: "` + pool.name + `", id: "` + pool.id + `", force: pool.force }, { id: "` + virtualdevice.id + `", disk: ` + virtualdevice.disk + ` }, { idnew: disk.idnew }, { name: modal.name, id: modal.id });
                 }
 			});
+
+            $("#dropdown-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").on("click", "li a", function () {
+                $("#btnspan-storagepool-status-disk-attach-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").text($(this).text()).attr("data-field-value", $(this).parent().attr("value"));
+                $(this).parent().siblings().removeClass("active");
+                $(this).parent().addClass("active");
+
+                $("#helpblock-storagepool-status-disk-attach-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
+                ` + (zfsmanager.zfs.warnings.nvmevdev ? `$("#helpblock-storagepool-status-disk-attach-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");` : ``) + `
+
+                let disk = {
+                    identifier: $(this).parent().attr("value"),
+                    identifiertext: $(this).parent().text()
+                };
+
+                $("#listgroup-storagepool-status-disk-attach-disks-` + pool.status.config.items.index + `-` + pool.id + ` input[name='checkbox-storagepool-status-disk-attach-disks-` + pool.status.config.items.index + `-` + pool.id + `']").map(function () {
+                    if ($(this).attr("data-disk-id-" + disk.identifier)) {
+                        $(this).next().find(".select-ct-disk-row-id").text((disk.identifier == "blockdevice" ? "/dev/" : "") + $(this).attr("data-disk-id-" + disk.identifier));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-" + disk.identifier));
+                    } else {
+                        $(this).next().find(".select-ct-disk-row-id").text("/dev/" + $(this).attr("data-disk-id-blockdevice"));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-blockdevice"));
+                        $("#helpblock-storagepool-status-disk-attach-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden").text("One or more disks is missing a " + disk.identifiertext + " identifier.");
+
+                        ` + (zfsmanager.zfs.warnings.nvmevdev ? `
+                        if (disk.identifier == "vdev" && /^nvme/gi.test($(this).attr("data-disk-id-blockdevice"))) {
+                            $("#helpblock-storagepool-status-disk-attach-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
+                        }
+                        ` : ``) + `
+                    }
+                });
+            });
         \x3C/script>
     `;
 
@@ -18369,7 +19756,7 @@ function FnModalStatusDiskReplace(pool = { name, id, status: { config: { items: 
             $("#btn-storagepool-status-disk-replace-` + pool.status.config.items.index + `-` + pool.id + `").on("click", function () {
                 FnStoragePoolRefreshAutoDisable({ name: "` + pool.name + `", id: "` + pool.id + `" });
                 FnModalStatusDiskReplaceContent({ name: "` + pool.name + `", id: "` + pool.id + `", status: { config: { items: { index: ` + pool.status.config.items.index + ` } } } }, { id: "` + disk.id + `" }, { id: $("#modal-storagepool-status-disk-replace-` + pool.status.config.items.index + `-` + pool.id + `") });
-                FnDisksAvailableGet({ wwn: true }, { name: "storagepool-status-disk-replace-disks", id: "` + pool.status.config.items.index + `-` + pool.id + `", default: true });
+                FnDisksAvailableGet({ name: "storagepool-status-disk-replace-disks", id: "` + pool.status.config.items.index + `-` + pool.id + `", default: true });
             });
         \x3C/script>
     `;
@@ -18392,12 +19779,28 @@ function FnModalStatusDiskReplaceContent(pool = { name, id, status: { config: { 
                         </div>
                         <label class="control-label">Disks WWN</label>
                         <div role="group">
-                            <label id="switch-storagepool-status-disk-replace-diskswwn-` + pool.status.config.items.index + `-` + pool.id + `" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="1" type="checkbox"><span class="switch-toggle"></span></label><span></span>
+                            <label id="switch-storagepool-status-disk-replace-disks-wwn-` + pool.status.config.items.index + `-` + pool.id + `" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="1" type="checkbox"><span class="switch-toggle"></span></label><span></span>
+                        </div>
+                        <label id="controllabel-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="control-label hidden">Disks Identifier</label>
+                        <div id="validationwrapper-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="ct-validation-wrapper hidden">
+                            <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="2" type="button">
+                                    <span id="btnspan-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="pull-left" data-field-value="blockdevice">Block Device</span>
+                                    <div class="caret"></div>
+                                </button>
+                                <ul id="dropdown-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="dropdown-menu">
+                                    <li class="active" value="blockdevice"><a tabindex="-1">Block Device</a></li>
+                                    <li value="disk"><a tabindex="-1">Disk</a></li>
+                                    <li value="path"><a tabindex="-1">Hardware Path</a></li>
+                                    <li value="vdev"><a tabindex="-1">Virtual Device Mapping</a></li>
+                                </ul>
+                            </div>
                         </div>
                         <label class="control-label">Disks <a data-placement="right" data-toggle="tooltip" tabindex="-1" title="Drives with 4 KiB physical sector size may report/emulate 512 B for backwards compatibility.<br><br>Configure the storage pool sector size to 4 KiB or above to optimise disk operation"><span class="fa fa-lg fa-info-circle"></span></a></label>
                         <div id="validationwrapper-storagepool-status-disk-replace-disks-` + pool.status.config.items.index + `-` + pool.id + `" class="ct-validation-wrapper" tabindex="-1">
                             <ul id="listgroup-storagepool-status-disk-replace-disks-` + pool.status.config.items.index + `-` + pool.id + `" class="list-group dialog-list-ct" data-field="disks" data-field-type="select-disks"></ul>
-                            <span id="helpblock-storagepool-status-disk-replace-disks-wwnwarning-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
+                            <span id="helpblock-storagepool-status-disk-replace-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
+                            ` + (zfsmanager.zfs.warnings.nvmevdev ? `<span id="helpblock-storagepool-status-disk-replace-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block hidden">Virtual Device Mapping identifiers for NVMe devices may not have been created due to a bug in the <a href="https://github.com/zfsonlinux/zfs/issues/9730" target="_blank">ZFS software</a>. Update ZFS to 0.8.3 for fix.</span>` : ``) + `
                             <span id="helpblock-storagepool-status-disk-replace-disks-zfsmemberwarning-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
                             <span id="helpblock-storagepool-status-disk-replace-disks-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
                         </div>
@@ -18421,11 +19824,36 @@ function FnModalStatusDiskReplaceContent(pool = { name, id, status: { config: { 
         </div>
 
         \x3Cscript nonce="1t55lZ7tzuKTreHVNwE66Ox32Mc=">
-            $("#switch-storagepool-status-disk-replace-diskswwn-` + pool.status.config.items.index + `-` + pool.id + ` input").on("click", function () {
-                $("#helpblock-storagepool-status-disk-replace-disks-wwnwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
-                $("#helpblock-storagepool-status-disk-replace-disks-zfsmemberwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
+            $("#switch-storagepool-status-disk-replace-disks-wwn-` + pool.status.config.items.index + `-` + pool.id + ` input").on("click", function () {
+                $("#btnspan-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").text("Block Device");
+                $("#dropdown-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + ` li").siblings().removeClass("active");
+                $("#dropdown-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + ` li[value='blockdevice']").addClass("active");
+                $("#helpblock-storagepool-status-disk-replace-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
+                ` + (zfsmanager.zfs.warnings.nvmevdev ? `$("#helpblock-storagepool-status-disk-replace-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");` : ``) + `
 
-                FnDisksAvailableGet({ wwn: ($(this).prop("checked") ? true : false) }, { name: "storagepool-status-disk-replace-disks", id: "` + pool.status.config.items.index + `-` + pool.id + `", default: false });
+                let disk = {
+                    identifier: ($(this).prop("checked") ? "wwn" : "blockdevice"),
+                    identifiertext: ($(this).prop("checked") ? "WWN" : "Block Device")
+                };
+
+                if ($(this).prop("checked")) {
+                    $("#controllabel-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");
+                    $("#validationwrapper-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");
+                } else {
+                    $("#controllabel-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
+                    $("#validationwrapper-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
+                }
+
+                $("#listgroup-storagepool-status-disk-replace-disks-` + pool.status.config.items.index + `-` + pool.id + ` input[name='checkbox-storagepool-status-disk-replace-disks-` + pool.status.config.items.index + `-` + pool.id + `']").map(function () {
+                    if ($(this).attr("data-disk-id-" + disk.identifier)) {
+                        $(this).next().find(".select-ct-disk-row-id").text((disk.identifier == "blockdevice" ? "/dev/" : "") + $(this).attr("data-disk-id-" + disk.identifier));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-" + disk.identifier));
+                    } else {
+                        $(this).next().find(".select-ct-disk-row-id").text("/dev/" + $(this).attr("data-disk-id-blockdevice"));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-blockdevice"));
+                        $("#helpblock-storagepool-status-disk-replace-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden").text("One or more disks is missing a " + disk.identifiertext + " identifier.");
+                    }
+                });
             });
 
             $("#btn-storagepool-status-disk-replace-apply-` + pool.status.config.items.index + `-` + pool.id + `").on("click", function () {
@@ -18433,8 +19861,7 @@ function FnModalStatusDiskReplaceContent(pool = { name, id, status: { config: { 
                 $(this).prop("disabled", true);
 
                 let disk = {
-                    idnew: [],
-                    wwn: true
+                    idnew: []
                 };
                 let modal = {
                     name: "",
@@ -18470,8 +19897,6 @@ function FnModalStatusDiskReplaceContent(pool = { name, id, status: { config: { 
                 }
 
                 if (validation.disks) {
-                    disk.wwn = $("#switch-storagepool-status-disk-replace-diskswwn-` + pool.status.config.items.index + `-` + pool.id + ` input").prop("checked");
-
                     modal.name = "storagepool-status-disk-replace";
                     modal.id = "` + pool.status.config.items.index + `-` + pool.id + `";
 
@@ -18480,9 +19905,40 @@ function FnModalStatusDiskReplaceContent(pool = { name, id, status: { config: { 
                     $("[id^=btn-storagepool-status-dropdown-][id$=` + pool.id + `]").addClass("disabled");
                     $("#spinner-storagepool-status-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
 
-                    FnStoragePoolDiskReplace({ name: "` + pool.name + `", id: "` + pool.id + `", force: pool.force }, { id: "` + disk.id + `", idnew: disk.idnew, wwn: disk.wwn }, { name: modal.name, id: modal.id });
+                    FnStoragePoolDiskReplace({ name: "` + pool.name + `", id: "` + pool.id + `", force: pool.force }, { id: "` + disk.id + `", idnew: disk.idnew }, { name: modal.name, id: modal.id });
                 }
 			});
+
+            $("#dropdown-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").on("click", "li a", function () {
+                $("#btnspan-storagepool-status-disk-replace-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").text($(this).text()).attr("data-field-value", $(this).parent().attr("value"));
+                $(this).parent().siblings().removeClass("active");
+                $(this).parent().addClass("active");
+
+                $("#helpblock-storagepool-status-disk-replace-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
+                ` + (zfsmanager.zfs.warnings.nvmevdev ? `$("#helpblock-storagepool-status-disk-replace-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");` : ``) + `
+
+                let disk = {
+                    identifier: $(this).parent().attr("value"),
+                    identifiertext: $(this).parent().text()
+                };
+
+                $("#listgroup-storagepool-status-disk-replace-disks-` + pool.status.config.items.index + `-` + pool.id + ` input[name='checkbox-storagepool-status-disk-replace-disks-` + pool.status.config.items.index + `-` + pool.id + `']").map(function () {
+                    if ($(this).attr("data-disk-id-" + disk.identifier)) {
+                        $(this).next().find(".select-ct-disk-row-id").text((disk.identifier == "blockdevice" ? "/dev/" : "") + $(this).attr("data-disk-id-" + disk.identifier));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-" + disk.identifier));
+                    } else {
+                        $(this).next().find(".select-ct-disk-row-id").text("/dev/" + $(this).attr("data-disk-id-blockdevice"));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-blockdevice"));
+                        $("#helpblock-storagepool-status-disk-replace-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden").text("One or more disks is missing a " + disk.identifiertext + " identifier.");
+
+                        ` + (zfsmanager.zfs.warnings.nvmevdev ? `
+                        if (disk.identifier == "vdev" && /^nvme/gi.test($(this).attr("data-disk-id-blockdevice"))) {
+                            $("#helpblock-storagepool-status-disk-replace-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
+                        }
+                        ` : ``) + `
+                    }
+                });
+            });
         \x3C/script>
     `;
 
@@ -18717,7 +20173,7 @@ function FnModalStatusStoragePoolResilverContent(pool = { name, id, status: { co
                 </div>
                 <div class="modal-body">
                     <div class="modal-ct-bodytext-1">Are you sure you want to start resilver for storage pool: <strong class="modal-ct-name">` + pool.name + `</strong>?</div>
-                    ` + (pool.status.resilver.started ? `<div class="alert alert-warning"><span class="pficon pficon-warning-triangle-o"></span><span>A resilver is currently in progress and will be restarted.</span></div>` : ``) + `
+                    ` + (pool.status.resilver.started ? FnDisplayInlineAlert({ status: "warning", title: "A resilver is currently in progress and will be restarted.", description: null }, { name: null, id: null, hidden: false }) : ``) + `
                     <div class="modal-ct-bodytext-1"></div>
                 </div>
                 <div class="modal-footer">
@@ -18782,7 +20238,7 @@ function FnModalStatusStoragePoolTrimStartContent(pool = { name, id, autotrim: f
                 </div>
                 <div class="modal-body">
                     <div class="modal-ct-bodytext-1">Are you sure you want to start TRIM for storage pool: <strong class="modal-ct-name">` + pool.name + `</strong>?</div>
-                    ` + (pool.autotrim ? `<div class="alert alert-info"><span class="pficon pficon-info"></span><span>Automatic TRIM is currently enabled for this storage pool.</span></div>` : ``) + `
+                    ` + (pool.autotrim ? FnDisplayInlineAlert({ status: "info", title: "Automatic TRIM is currently enabled for this storage pool.", description: null }, { name: null, id: null, hidden: false }) : ``) + `
                     <form class="ct-form ct-form-spacing">
                         <label class="control-label">Options</label>
                         <div role="group">
@@ -18857,7 +20313,7 @@ function FnModalStatusStoragePoolUpgradeContent(pool = { name, id, status: { con
                 <div class="modal-body">
                     <div class="modal-ct-bodytext-1">Are you sure you want to upgrade storage pool: <strong class="modal-ct-name">` + pool.name + `</strong>?</div>
                     ` + ($.isNumeric(pool.version) ? `<div class="modal-ct-bodytext-1">Legacy Version: ` + pool.version + `</div>` : ``) + `
-                    <div class="alert alert-info"><span class="pficon pficon-info"></span><span>` + ($.isNumeric(pool.version) ? `The storage pool will no longer be accessible on software that does not support feature flags.` : `Once a feature is enabled the pool may become incompatible with software that does not support the feature.`) + `</span></div>                    
+                    ` + FnDisplayInlineAlert({ status: ($.isNumeric(pool.version) ? "danger" : "warning"), title: ($.isNumeric(pool.version) ? "The storage pool will no longer be accessible on software that does not support feature flags." : "Once a feature is enabled the pool may become incompatible with software that does not support the feature."), description: null }, { name: null, id: null, hidden: false }) + `
                     <div id="panelgroup-storagepool-status-upgrade-features-` + pool.status.config.items.index + `-` + pool.id + `" class="panel-group modal-ct-bodytext-1">
                         <div id="panel-storagepool-status-upgrade-features-` + pool.status.config.items.index + `-` + pool.id + `" class="panel panel-default">
                             <div class="panel-heading">
@@ -18880,7 +20336,7 @@ function FnModalStatusStoragePoolUpgradeContent(pool = { name, id, status: { con
 	                </div>
                     <div class="modal-ct-buttons">
                         <button class="btn btn-default cancel" data-dismiss="modal" tabindex="-1">Cancel</button>
-                        <button id="btn-storagepool-status-upgrade-apply-` + pool.status.config.items.index + `-` + pool.id + `" class="btn btn-danger apply privileged-modal" tabindex="-1">Upgrade</button>
+                        <button id="btn-storagepool-status-upgrade-apply-` + pool.status.config.items.index + `-` + pool.id + `" class="btn btn-` + ($.isNumeric(pool.version) ? `danger` : `warning`) + ` apply privileged-modal" tabindex="-1">Upgrade</button>
                     </div>
                 </div>
             </div>
@@ -18919,7 +20375,7 @@ function FnModalStatusVirtualDeviceAdd(pool = { name, id, feature: { allocation_
             $("#btn-storagepool-status-virtualdevice-add-` + pool.status.config.items.index + `-` + pool.id + `").on("click", function () {
                 FnStoragePoolRefreshAutoDisable({ name: "` + pool.name + `", id: "` + pool.id + `" });
                 FnModalStatusVirtualDeviceAddContent({ name: "` + pool.name + `", id: "` + pool.id + `", feature: { allocation_classes: ` + pool.feature.allocation_classes + ` }, status: { config: { items: { index: ` + pool.status.config.items.index + ` } } } }, { id: $("#modal-storagepool-status-virtualdevice-add-` + pool.status.config.items.index + `-` + pool.id + `") });
-                FnDisksAvailableGet({ wwn: true }, { name: "storagepool-status-virtualdevice-add-disks", id: "` + pool.status.config.items.index + `-` + pool.id + `", default: true });
+                FnDisksAvailableGet({ name: "storagepool-status-virtualdevice-add-disks", id: "` + pool.status.config.items.index + `-` + pool.id + `", default: true });
             });
         \x3C/script>
     `;
@@ -18967,16 +20423,32 @@ function FnModalStatusVirtualDeviceAddContent(pool = { name, id, feature: { allo
                         </div>
                         <label id="controllabel-storagepool-status-virtualdevice-add-special-mirror-` + pool.status.config.items.index + `-` + pool.id + `" class="control-label hidden">Special (Mirror)</label>
                         <div class="hidden" role="group">
-                            <label id="switch-storagepool-status-virtualdevice-add-special-mirror-` + pool.status.config.items.index + `-` + pool.id + `" class="onoff-ct privileged-modal"><input tabIndex="3" type="checkbox"><span class="switch-toggle"></span></label><span></span>
+                            <label id="switch-storagepool-status-virtualdevice-add-special-mirror-` + pool.status.config.items.index + `-` + pool.id + `" class="onoff-ct privileged-modal"><input tabIndex="4" type="checkbox"><span class="switch-toggle"></span></label><span></span>
                         </div>
                         <label class="control-label">Disks WWN</label>
                         <div role="group">
-                            <label id="switch-storagepool-status-virtualdevice-add-diskswwn-` + pool.status.config.items.index + `-` + pool.id + `" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="4" type="checkbox"><span class="switch-toggle"></span></label><span></span>
+                            <label id="switch-storagepool-status-virtualdevice-add-disks-wwn-` + pool.status.config.items.index + `-` + pool.id + `" class="onoff-ct privileged-modal"><input checked="checked" tabIndex="5" type="checkbox"><span class="switch-toggle"></span></label><span></span>
+                        </div>
+                        <label id="controllabel-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="control-label hidden">Disks Identifier</label>
+                        <div id="validationwrapper-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="ct-validation-wrapper hidden">
+                            <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
+                                <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="6" type="button">
+                                    <span id="btnspan-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="pull-left" data-field-value="blockdevice">Block Device</span>
+                                    <div class="caret"></div>
+                                </button>
+                                <ul id="dropdown-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `" class="dropdown-menu">
+                                    <li class="active" value="blockdevice"><a tabindex="-1">Block Device</a></li>
+                                    <li value="disk"><a tabindex="-1">Disk</a></li>
+                                    <li value="path"><a tabindex="-1">Hardware Path</a></li>
+                                    <li value="vdev"><a tabindex="-1">Virtual Device Mapping</a></li>
+                                </ul>
+                            </div>
                         </div>
                         <label class="control-label">Disks <a data-placement="right" data-toggle="tooltip" tabindex="-1" title="Drives with 4 KiB physical sector size may report/emulate 512 B for backwards compatibility.<br><br>Configure the storage pool sector size to 4 KiB or above to optimise disk operation"><span class="fa fa-lg fa-info-circle"></span></a></label>
                         <div id="validationwrapper-storagepool-status-virtualdevice-add-disks-` + pool.status.config.items.index + `-` + pool.id + `" class="ct-validation-wrapper" tabindex="-1">
                             <ul id="listgroup-storagepool-status-virtualdevice-add-disks-` + pool.status.config.items.index + `-` + pool.id + `" class="list-group dialog-list-ct" data-field="disks" data-field-type="select-disks"></ul>
-                            <span id="helpblock-storagepool-status-virtualdevice-add-disks-wwnwarning-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
+                            <span id="helpblock-storagepool-status-virtualdevice-add-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
+                            ` + (zfsmanager.zfs.warnings.nvmevdev ? `<span id="helpblock-storagepool-status-virtualdevice-add-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block hidden">Virtual Device Mapping identifiers for NVMe devices may not have been created due to a bug in the <a href="https://github.com/zfsonlinux/zfs/issues/9730" target="_blank">ZFS software</a>. Update ZFS to 0.8.3 for fix.</span>` : ``) + `
                             <span id="helpblock-storagepool-status-virtualdevice-add-disks-zfsmemberwarning-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
                             <span id="helpblock-storagepool-status-virtualdevice-add-disks-` + pool.status.config.items.index + `-` + pool.id + `" class="help-block"></span>
                         </div>
@@ -19000,11 +20472,36 @@ function FnModalStatusVirtualDeviceAddContent(pool = { name, id, feature: { allo
         </div>
 
         \x3Cscript nonce="1t55lZ7tzuKTreHVNwE66Ox32Mc=">
-            $("#switch-storagepool-status-virtualdevice-add-diskswwn-` + pool.status.config.items.index + `-` + pool.id + ` input").on("click", function () {
-                $("#helpblock-storagepool-status-virtualdevice-add-disks-wwnwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
-                $("#helpblock-storagepool-status-virtualdevice-add-disks-zfsmemberwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
+            $("#switch-storagepool-status-virtualdevice-add-disks-wwn-` + pool.status.config.items.index + `-` + pool.id + ` input").on("click", function () {
+                $("#btnspan-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").text("Block Device");
+                $("#dropdown-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + ` li").siblings().removeClass("active");
+                $("#dropdown-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + ` li[value='blockdevice']").addClass("active");
+                $("#helpblock-storagepool-status-virtualdevice-add-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
+                ` + (zfsmanager.zfs.warnings.nvmevdev ? `$("#helpblock-storagepool-status-virtualdevice-add-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");` : ``) + `
 
-                FnDisksAvailableGet({ wwn: ($(this).prop("checked") ? true : false) }, { name: "storagepool-status-virtualdevice-add-disks", id: "` + pool.status.config.items.index + `-` + pool.id + `", default: false });
+                let disk = {
+                    identifier: ($(this).prop("checked") ? "wwn" : "blockdevice"),
+                    identifiertext: ($(this).prop("checked") ? "WWN" : "Block Device")
+                };
+
+                if ($(this).prop("checked")) {
+                    $("#controllabel-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");
+                    $("#validationwrapper-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");
+                } else {
+                    $("#controllabel-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
+                    $("#validationwrapper-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
+                }
+
+                $("#listgroup-storagepool-status-virtualdevice-add-disks-` + pool.status.config.items.index + `-` + pool.id + ` input[name='checkbox-storagepool-status-virtualdevice-add-disks-` + pool.status.config.items.index + `-` + pool.id + `']").map(function () {
+                    if ($(this).attr("data-disk-id-" + disk.identifier)) {
+                        $(this).next().find(".select-ct-disk-row-id").text((disk.identifier == "blockdevice" ? "/dev/" : "") + $(this).attr("data-disk-id-" + disk.identifier));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-" + disk.identifier));
+                    } else {
+                        $(this).next().find(".select-ct-disk-row-id").text("/dev/" + $(this).attr("data-disk-id-blockdevice"));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-blockdevice"));
+                        $("#helpblock-storagepool-status-virtualdevice-add-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden").text("One or more disks is missing a " + disk.identifiertext + " identifier.");
+                    }
+                });
             });
 
             $("#btn-storagepool-status-virtualdevice-add-apply-` + pool.status.config.items.index + `-` + pool.id + `").on("click", function () {
@@ -19117,6 +20614,38 @@ function FnModalStatusVirtualDeviceAddContent(pool = { name, id, feature: { allo
                     FnStoragePoolVirtualDeviceAdd({ name: "` + pool.name + `", id: "` + pool.id + `", force: pool.force, virtualdevice: pool.virtualdevice }, { id: disks.id }, { name: modal.name, id: modal.id });
                 }
 		    });
+
+            $("#dropdown-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").on("click", "li a", function () {
+                $("#btnspan-storagepool-status-virtualdevice-add-disks-identifier-` + pool.status.config.items.index + `-` + pool.id + `").text($(this).text()).attr("data-field-value", $(this).parent().attr("value"));
+                $(this).parent().siblings().removeClass("active");
+                $(this).parent().addClass("active");
+
+                $("#helpblock-storagepool-status-virtualdevice-add-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden").text("");
+                ` + (zfsmanager.zfs.warnings.nvmevdev ? `$("#helpblock-storagepool-status-virtualdevice-add-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `").addClass("hidden");` : ``) + `
+
+                let disk = {
+                    identifier: $(this).parent().attr("value"),
+                    identifiertext: $(this).parent().text()
+                };
+
+                $("#listgroup-storagepool-status-virtualdevice-add-disks-` + pool.status.config.items.index + `-` + pool.id + ` input[name='checkbox-storagepool-status-virtualdevice-add-disks-` + pool.status.config.items.index + `-` + pool.id + `']").map(function () {
+                    if ($(this).attr("data-disk-id-" + disk.identifier)) {
+                        $(this).next().find(".select-ct-disk-row-id").text((disk.identifier == "blockdevice" ? "/dev/" : "") + $(this).attr("data-disk-id-" + disk.identifier));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-" + disk.identifier));
+                    } else {
+                        $(this).next().find(".select-ct-disk-row-id").text("/dev/" + $(this).attr("data-disk-id-blockdevice"));
+                        $(this).attr("data-disk-name", $(this).attr("data-disk-id-blockdevice"));
+                        $("#helpblock-storagepool-status-virtualdevice-add-disks-identifierwarning-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden").text("One or more disks is missing a " + disk.identifiertext + " identifier.");
+
+
+                        ` + (zfsmanager.zfs.warnings.nvmevdev ? `
+                        if (disk.identifier == "vdev" && /^nvme/gi.test($(this).attr("data-disk-id-blockdevice"))) {
+                            $("#helpblock-storagepool-status-virtualdevice-add-disks-identifierwarningzfs-` + pool.status.config.items.index + `-` + pool.id + `").removeClass("hidden");
+                        }
+                        ` : ``) + `
+                    }
+                });
+            });
 
             $("#dropdown-storagepool-status-virtualdevice-add-virtualdevice-` + pool.status.config.items.index + `-` + pool.id + `").on("click", "li a", function () {
                 $("#btnspan-storagepool-status-virtualdevice-add-virtualdevice-` + pool.status.config.items.index + `-` + pool.id + `").text($(this).text()).attr("data-field-value", $(this).parent().attr("value"));
