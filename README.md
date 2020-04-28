@@ -1,6 +1,6 @@
 # Cockpit ZFS Manager
 
-![GitHub Tag](https://img.shields.io/github/v/release/optimans/cockpit-zfs-manager?include_prereleases&style=flat-square)
+[![GitHub Tag](https://img.shields.io/github/v/release/optimans/cockpit-zfs-manager?include_prereleases&style=flat-square&color=brightgreen)](https://github.com/optimans/cockpit-zfs-manager/releases)
 
 **An interactive ZFS on Linux admin package for Cockpit.**
 
