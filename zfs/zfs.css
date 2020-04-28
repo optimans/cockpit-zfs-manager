@@ -173,6 +173,11 @@ fieldset[disabled] .btn {
     display: inline-block;
 }
 
+/* Temp fix for modal buttons with Cockpit 217. 0.4 will be in React which will resolve this */
+.modal-footer {
+    text-align: right;
+}
+
 .open .dropdown-toggle.btn-default {
     color: var(--pf-global--Color--100);
 }
