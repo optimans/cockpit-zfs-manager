@@ -11,19 +11,20 @@ Cockpit ZFS Manager is currently pre-release software. Use at your own risk!
 ## Requirements
 
  * Cockpit: 201+
- * Samba: 4+
+ * NFS (Optional)
+ * Samba: 4+ (Optional)
  * ZFS: 0.8+
  
  <details>
   <summary>Tested Distributions</summary>
   
   * Arch Linux
-  * CentOS Linux 8.0
-  * Debian 10.0
+  * CentOS Linux 8
+  * Debian 10
   * Fedora 31
-  * Oracle Linux Server 8.0
-  * Proxmox VE 6.0
-  * Red Hat Enterprise Linux 8.0
+  * Oracle Linux Server 8
+  * Proxmox VE 6
+  * Red Hat Enterprise Linux 8
   * Ubuntu 18.04 LTS
   * Ubuntu 19.10
   
@@ -35,6 +36,8 @@ Cockpit ZFS Manager is currently pre-release software. Use at your own risk!
 <img src="https://user-images.githubusercontent.com/58222345/80313065-6d737880-881b-11ea-8bad-a37506c2ce12.png" width="425" />
 <img src="https://user-images.githubusercontent.com/58222345/80313066-6f3d3c00-881b-11ea-859d-a47cf1e85177.png" width="425" />
 <img src="https://user-images.githubusercontent.com/58222345/80313067-7106ff80-881b-11ea-9688-0c94f8088b3b.png" width="425" />
+
+<sup>Screenshots using Cockpit 217 on Oracle Linux 8.1 with UEK R6.</sup>
 
 ## Installation
 
@@ -58,7 +61,6 @@ $ sudo nano /etc/samba/smb.conf
 Append to [global] section or individual share sections
 
 ```
-[global]
 shadow: snapdir = .zfs/snapshot
 shadow: sort = desc
 shadow: format = %Y.%m.%d-%H.%M.%S
