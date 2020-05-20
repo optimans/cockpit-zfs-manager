@@ -1,4 +1,10 @@
-# Installation Example for CentOS 8.0 as an Active Directory Domain Services (AD DS) Member
+# CentOS 8 as an Active Directory Domain Services (AD DS) Member
+
+> Assumption is made that this is a newly installed base system
+>
+> Replace *DOMAIN* with AD DS NetBIOS Name and *domain.example.com* with AD DS FQDN
+
+### DNF
 
 Install EPEL and PowerTools:
 
@@ -8,10 +14,12 @@ $ sudo dnf config-manager --enable PowerTools
 $ sudo dnf update
 ```
 
+### Cockpit
+
 Remove old version of Cockpit if version is less than 201 and install latest Cockpit Preview
 
 ```bash
-$ sudo dnf remove cockpit*
+$ sudo dnf remove cockpit\*
 $ sudo dnf config-manager --add-repo https://copr.fedorainfracloud.org/coprs/g/cockpit/cockpit-preview/repo/epel-8/group_cockpit-cockpit-preview-epel-8.repo
 
 $ sudo dnf install cockpit cockpit-storaged setroubleshoot-server
@@ -30,7 +38,18 @@ $ sudo firewall-cmd --permanent --zone=public --add-service=cockpit
 $ sudo firewall-cmd --reload
 ```
 
-Install ZFS as per own requirements from ZFS on Linux: [https://github.com/zfsonlinux/zfs/wiki/Custom-Packages](https://github.com/zfsonlinux/zfs/wiki/Custom-Packages)
+Install Cockpit ZFS Manager
+
+```bash
+$ git clone https://github.com/optimans/cockpit-zfs-manager.git
+$ sudo cp -r cockpit-zfs-manager/zfs /usr/share/cockpit
+```
+
+### ZFS
+
+Install ZFS as per own requirements from ZFS on Linux: [https://github.com/openzfs/zfs/wiki/RHEL-and-CentOS](https://github.com/openzfs/zfs/wiki/RHEL-and-CentOS)
+
+### Samba
 
 Install Samba
 
@@ -45,6 +64,7 @@ $ sudo rm /etc/samba/smb.conf
 Join AD DS:
 
 ```bash
+$ sudo realm discover -vvv domain.example.com
 $ sudo realm join --client-software=winbind domain.example.com -U Administrator
 ```
 
@@ -72,8 +92,6 @@ $ sudo nano /etc/samba/smb.conf
 Append to [global] section
 
 ```
-[global]
-~
 idmap config DOMAIN : schema_mode = rfc2307
 
 vfs objects = acl_xattr shadow_copy2
@@ -100,6 +118,7 @@ Grant Disk Operator Privileges:
 
 ```bash
 $ sudo net rpc rights grant "DOMAIN\Domain Admins" SeDiskOperatorPrivilege -U "DOMAIN\Administrator"
+$ sudo net rpc rights grant "DOMAIN\Enterprise Admins" SeDiskOperatorPrivilege -U "DOMAIN\Administrator"
 ```
 Enable SELinux booleans:
 
@@ -115,10 +134,43 @@ $ sudo firewall-cmd --reload
 ```
 
 Restart and Enable Samba service:
+
 ```bash
 $ sudo systemctl restart smb
 $ sudo systemctl enable smb
 ```
 
-#### Red Hat Enterprise Linux 8 Documentation
+### Local Authorisation
+
+Edit Kerberos configuration file to enable domain users to authenticate to local services:
+
+```bash
+$ sudo nano /etc/krb5.conf
+```
+
+Append to end of file
+
+```
+[plugins]
+    localauth = {
+        module = winbind:/usr/lib64/samba/krb5/winbind_krb5_localauth.so
+        enable_only = winbind
+    }
+```
+
+Create sudoers configuration file to allow sudo access to domain groups
+
+```bash
+$ sudo nano /etc/sudoers.d/DOMAIN
+```
+
+Add to file
+
+```
+DOMAIN\\Domain\ Admins ALL=(ALL) ALL
+DOMAIN\\Enterprise\ Admins ALL=(ALL) ALL
+```
+
+### Red Hat Enterprise Linux 8 Documentation
+
  * [Chapter 2. Using Samba as a Server](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/deploying_different_types_of_servers/assembly_using-samba-as-a-server_deploying-different-types-of-servers)
