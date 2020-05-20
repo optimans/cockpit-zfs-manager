@@ -128,4 +128,4 @@ If enabled, Cockpit ZFS Manager manages shares for the file systems only. Samba 
 
 ## Guides
 
- * [Installation Example for CentOS 8.0 as an Active Directory Domain Services (AD DS) Member](guides/CentOS-8.0.md)
+ * [CentOS 8 as an Active Directory Domain Services (AD DS) Member](guides/CentOS-8.md)
