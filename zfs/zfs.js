@@ -73,7 +73,7 @@ let zfsmanager = {
         configuration: false,
         name: ""
     },
-    version: "0.3.2.348",
+    version: "0.3.3.404",
     zfs: {
         storagepool: {
             boot: "",
@@ -15822,7 +15822,7 @@ function FnModalFileSystemsCreateContent(pool = { name, id, altroot: false, feat
                     filesystem.passphrase = $("#input-storagepool-filesystems-create-encryption-passphrase-` + pool.id + `").val();
                     filesystem.readonly = ($("#switch-storagepool-filesystems-create-readonly-` + pool.id + ` input").prop("checked") ? "on" : "off");
                     filesystem.recordsize = $("#btnspan-storagepool-filesystems-create-recordsize-` + pool.id + `").attr("data-field-value");
-                    filesystem.selinux = ($("#switch-storagepool-filesystems-create-selinux-` + pool.id + ` input").prop("checked") ? "on" : "off");
+                    filesystem.selinux = $("#switch-storagepool-filesystems-create-selinux-` + pool.id + ` input").prop("checked");
                     filesystem.sharesmb = ($("#switch-storagepool-filesystems-create-samba-share-` + pool.id + ` input").prop("checked") ? "on" : "off");
                     filesystem.special_small_blocks = $("#btnspan-storagepool-filesystems-create-special_small_blocks-` + pool.id + `").attr("data-field-value");
                     filesystem.xattr = $("#btnspan-storagepool-filesystems-create-xattr-` + pool.id + `").attr("data-field-value");
