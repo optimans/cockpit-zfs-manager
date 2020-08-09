@@ -121,7 +121,21 @@ If SELinux contexts for Samba is selected, the following properties are set:
 
 ZFS always creates shares in /var/lib/samba/usershares folder when ShareSMB property is enabled. This is also the case even if Cockpit ZFS Manager is managing the shares. To avoid duplicate shares of the same file system, it is recommended to configure a different usershares folder path if required or to disable usershares in the Samba configuration file.
 
+Note: Newer versions of Samba may require the usershares folder to be set to a new path instead of [disabled in configuration](https://github.com/optimans/cockpit-zfs-manager/issues/12):
+
+```bash
+$ sudo nano /etc/samba/smb.conf
+$ sudo mkdir /var/lib/samba/usershares2
+```
+
+Append/Change to [global] section
+
+```
+usershare path = /var/lib/samba/usershares2
+```
+
 If enabled, Cockpit ZFS Manager manages shares for the file systems only. Samba global configuration will need to be configured externally.
+
 ## More Information
 
 * [ServeTheHome and ServeThe.Biz Forums](https://forums.servethehome.com/index.php?threads/25668/)
