@@ -124,8 +124,8 @@ ZFS always creates shares in /var/lib/samba/usershares folder when ShareSMB prop
 Note: Newer versions of Samba may require the usershares folder to be set to a new path instead of [disabled in configuration](https://github.com/optimans/cockpit-zfs-manager/issues/12):
 
 ```bash
-$ sudo nano /etc/samba/smb.conf
 $ sudo mkdir /var/lib/samba/usershares2
+$ sudo nano /etc/samba/smb.conf
 ```
 
 Append/Change to [global] section
