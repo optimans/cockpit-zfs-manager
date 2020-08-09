@@ -13737,13 +13737,13 @@ function FnModalStoragePoolsCreateContent(modal = { id }) {
                         <div class="ct-validation-wrapper">
                             <div class="btn-group bootstrap-select dropdown form-control privileged-modal">
                                 <button aria-expanded="false" class="btn btn-default dropdown-toggle" data-toggle="dropdown" tabIndex="1000" type="button">
-                                    <span id="btnspan-storagepools-create-ashift" class="pull-left" data-field-value="0">Auto Detect</span>
+                                    <span id="btnspan-storagepools-create-ashift" class="pull-left" data-field-value="12">4 KiB</span>
                                     <div class="caret"></div>
                                 </button>
                                 <ul id="dropdown-storagepools-create-ashift" class="dropdown-menu">
-                                    <li class="active" value="0"><a tabindex="-1">Auto Detect</a></li>
+                                    <li value="0"><a tabindex="-1">Auto Detect</a></li>
                                     <li value="9"><a tabindex="-1">512 B</a></li>
-                                    <li value="12"><a tabindex="-1">4 KiB</a></li>
+                                    <li class="active" value="12"><a tabindex="-1">4 KiB</a></li>
                                     <li value="13"><a tabindex="-1">8 KiB</a></li>
                                     <li value="14"><a tabindex="-1">16 KiB</a></li>
                                     <li value="15"><a tabindex="-1">32 KiB</a></li>
