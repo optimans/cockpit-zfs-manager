@@ -4,9 +4,11 @@
 
 **An interactive ZFS on Linux admin package for Cockpit.**
 
-### WARNING!
+Use of this software is at your risk!
 
-Cockpit ZFS Manager is currently pre-release software. Use at your own risk!
+## End-of-Life
+
+This software has reached its end-of-life and is no longer maintained.
 
 ## Requirements
 
@@ -14,30 +16,6 @@ Cockpit ZFS Manager is currently pre-release software. Use at your own risk!
  * NFS (Optional)
  * Samba: 4+ (Optional)
  * ZFS: 0.8+
- 
- <details>
-  <summary>Tested Distributions</summary>
-  
-  * Arch Linux
-  * CentOS Linux 8
-  * Debian 10
-  * Fedora 31
-  * Oracle Linux Server 8
-  * Proxmox VE 6
-  * Red Hat Enterprise Linux 8
-  * Ubuntu 18.04 LTS
-  * Ubuntu 19.10
-  
-</details>
-
-## Screenshots
-<img src="https://user-images.githubusercontent.com/58222345/80313061-69dff180-881b-11ea-98d4-e245ed8faffd.png" width="425" /> <img src="https://user-images.githubusercontent.com/58222345/80313062-6b111e80-881b-11ea-9d0e-d4bcac251bf1.png" width="425" />
-<img src="https://user-images.githubusercontent.com/58222345/80313064-6c424b80-881b-11ea-812f-ab3a99edef75.png" width="425" />
-<img src="https://user-images.githubusercontent.com/58222345/80313065-6d737880-881b-11ea-8bad-a37506c2ce12.png" width="425" />
-<img src="https://user-images.githubusercontent.com/58222345/80313066-6f3d3c00-881b-11ea-859d-a47cf1e85177.png" width="425" />
-<img src="https://user-images.githubusercontent.com/58222345/80313067-7106ff80-881b-11ea-9688-0c94f8088b3b.png" width="425" />
-
-<sup>Screenshots using Cockpit 217 on Oracle Linux 8.1 with UEK R6.</sup>
 
 ## Installation
 
@@ -78,13 +56,9 @@ $ sudo setsebool -P samba_export_all_ro=1 samba_export_all_rw=1
 
 ## Using Cockpit ZFS Manager
 
-Login to Cockpit as a privileged user and click ZFS from the navigation list.
+Login to Cockpit as an administrative user and click ZFS from the navigation list.
 
 A Welcome to Cockpit ZFS Manager modal will display and allow you to configure initial settings.
-
-Note: Inline help is currently available in modals. Documentation will be created at a later date.
-
-
 
 ## Caveats
 
@@ -121,7 +95,7 @@ If SELinux contexts for Samba is selected, the following properties are set:
 
 ZFS always creates shares in /var/lib/samba/usershares folder when ShareSMB property is enabled. This is also the case even if Cockpit ZFS Manager is managing the shares. To avoid duplicate shares of the same file system, it is recommended to configure a different usershares folder path if required or to disable usershares in the Samba configuration file.
 
-Note: Newer versions of Samba may require the usershares folder to be set to a new path instead of [disabled in configuration](https://github.com/optimans/cockpit-zfs-manager/issues/12):
+Note: Newer versions of Samba may require the usershares folder to be set to a new path instead of disabled in configuration:
 
 ```bash
 $ sudo mkdir /var/lib/samba/usershares2
@@ -136,10 +110,6 @@ usershare path = /var/lib/samba/usershares2
 
 If enabled, Cockpit ZFS Manager manages shares for the file systems only. Samba global configuration will need to be configured externally.
 
-## More Information
-
-* [ServeTheHome and ServeThe.Biz Forums](https://forums.servethehome.com/index.php?threads/25668/)
-
 ## Guides
 
- * [CentOS 8 as an Active Directory Domain Services (AD DS) Member](guides/CentOS-8.md)
+ * [Red Hat Enterprise Linux 8 as an Active Directory Domain Services (AD DS) Member](guides/Red-Hat-Enterprise-Linux-8.md)
