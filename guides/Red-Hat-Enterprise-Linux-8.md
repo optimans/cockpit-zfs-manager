@@ -1,41 +1,25 @@
-# CentOS 8 as an Active Directory Domain Services (AD DS) Member
+# Red Hat Enterprise Linux 8 as an Active Directory Domain Services (AD DS) Member
 
-> Assumption is made that this is a newly installed base system
+> Assumption is made that this is a newly installed server base environment
 >
 > Replace *DOMAIN* with AD DS NetBIOS Name and *domain.example.com* with AD DS FQDN
 
 ### DNF
 
-Install EPEL and PowerTools:
+Install EPEL and Development Tools:
 
 ```bash
 $ sudo dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
-$ sudo dnf config-manager --enable PowerTools
+$ sudo dnf group install "Development Tools"
 $ sudo dnf update
 ```
 
 ### Cockpit
 
-Remove old version of Cockpit if version is less than 201 and install latest Cockpit Preview
-
-```bash
-$ sudo dnf remove cockpit\*
-$ sudo dnf config-manager --add-repo https://copr.fedorainfracloud.org/coprs/g/cockpit/cockpit-preview/repo/epel-8/group_cockpit-cockpit-preview-epel-8.repo
-
-$ sudo dnf install cockpit cockpit-storaged setroubleshoot-server
-```
-
 Enable Cockpit:
 
 ```bash
 $ sudo systemctl enable --now cockpit.socket
-```
-
-Create firewall rules for Cockpit:
-
-```bash
-$ sudo firewall-cmd --permanent --zone=public --add-service=cockpit
-$ sudo firewall-cmd --reload
 ```
 
 Install Cockpit ZFS Manager
@@ -45,9 +29,9 @@ $ git clone https://github.com/optimans/cockpit-zfs-manager.git
 $ sudo cp -r cockpit-zfs-manager/zfs /usr/share/cockpit
 ```
 
-### ZFS
+### OpenZFS
 
-Install ZFS as per own requirements from ZFS on Linux: [https://github.com/openzfs/zfs/wiki/RHEL-and-CentOS](https://github.com/openzfs/zfs/wiki/RHEL-and-CentOS)
+Install OpenZFS as per own requirements from OpenZFS: [Getting Started: RHEL and CentOS](https://openzfs.github.io/openzfs-docs/Getting%20Started/RHEL%20and%20CentOS.html)
 
 ### Samba
 
